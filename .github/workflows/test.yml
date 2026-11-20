@@ -1,0 +1,195 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck
+        uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1.4.1
+        with:
+          # Pinned: a new staticcheck can add checks that break the build.
+          version: "2026.2.2"
+          install-go: false
+
+  test:
+    name: Test (go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    needs: [lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum in go.mod, and the latest release.
+        go-version: ["1.23.x", "stable"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Run tests
+        run: go test -race -count=1 -coverprofile=coverage.raw ./...
+
+      - name: Build and run the binary
+        run: |
+          go build -o tmetric .
+          ./tmetric --version
+
+      - name: Drop main.go from coverage
+        # main.go only wires signals to os.Exit; sonar-project.properties excludes it too.
+        run: grep -v '^github.com/othercodes/tmetric-cli/main.go:' coverage.raw > coverage.out
+
+      - name: Upload coverage data
+        if: matrix.go-version == 'stable'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.out
+          if-no-files-found: error
+
+  coverage:
+    name: Coverage (100% gate)
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Download coverage data
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+
+      - name: Enforce 100% gate
+        run: |
+          go tool cover -func=coverage.out
+          total="$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')"
+          if [ "$total" != "100.0%" ]; then
+            echo "❌ Coverage is $total, the gate is 100%" >&2
+            exit 1
+          fi
+          echo "✅ Coverage is 100%"
+
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: [coverage]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download coverage data
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [lint, test, coverage, sonarcloud]
+    if: always()
+
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "===== Job Results ====="
+          echo "Lint:       ${{ needs.lint.result }}"
+          echo "Test:       ${{ needs.test.result }}"
+          echo "Coverage:   ${{ needs.coverage.result }}"
+          echo "SonarCloud: ${{ needs.sonarcloud.result }}"
+          echo "======================="
+
+          fail=0
+
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "❌ Lint failed" >&2
+            fail=1
+          fi
+
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "❌ Tests failed" >&2
+            fail=1
+          fi
+
+          if [ "${{ needs.coverage.result }}" != "success" ]; then
+            echo "❌ Coverage gate failed" >&2
+            fail=1
+          fi
+
+          if [ "${{ needs.sonarcloud.result }}" != "success" ]; then
+            echo "❌ SonarCloud failed" >&2
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "🛑 Merge blocked — fix the failures above."
+            exit 1
+          fi
+
+          echo "✅ All required checks passed."
