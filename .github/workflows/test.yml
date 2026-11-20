@@ -48,7 +48,7 @@ jobs:
         run: go vet ./...
 
       - name: Run staticcheck
-        uses: dominikh/staticcheck-action@v1
+        uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1.4.1
         with:
           # Pinned: a new staticcheck can add checks that break the build.
           version: "2026.2.2"
@@ -122,7 +122,7 @@ jobs:
           go tool cover -func=coverage.out
           total="$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')"
           if [ "$total" != "100.0%" ]; then
-            echo "❌ Coverage is $total, the gate is 100%"
+            echo "❌ Coverage is $total, the gate is 100%" >&2
             exit 1
           fi
           echo "✅ Coverage is 100%"
@@ -145,7 +145,7 @@ jobs:
           name: coverage-report
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -168,22 +168,22 @@ jobs:
           fail=0
 
           if [ "${{ needs.lint.result }}" != "success" ]; then
-            echo "❌ Lint failed"
+            echo "❌ Lint failed" >&2
             fail=1
           fi
 
           if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "❌ Tests failed"
+            echo "❌ Tests failed" >&2
             fail=1
           fi
 
           if [ "${{ needs.coverage.result }}" != "success" ]; then
-            echo "❌ Coverage gate failed"
+            echo "❌ Coverage gate failed" >&2
             fail=1
           fi
 
           if [ "${{ needs.sonarcloud.result }}" != "success" ]; then
-            echo "❌ SonarCloud failed"
+            echo "❌ SonarCloud failed" >&2
             fail=1
           fi
 
