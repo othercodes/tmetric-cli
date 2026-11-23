@@ -40,11 +40,11 @@ Differences from webshare-cli:
 | Use | Route |
 |---|---|
 | user, account, timezone | `GET /user` → `id`, `name`, `email`, `activeAccountId`, `timeZone{id}`, `accounts[]{id,name,firstWeekDay}` |
-| timer status | `GET /accounts/{accountId}/timeentries/latest?userId=` |
-| timer start | `POST /accounts/{accountId}/timeentries?userId=` body `{startTime, endTime:null, note, project:{id}, task:{id}}` |
+| timer status | `GET /accounts/{accountId}/timeentries/latest` |
+| timer start | `POST /accounts/{accountId}/timeentries` body `{startTime, endTime:null, note, project:{id}, task:{id}}` |
 | timer stop | `PUT /accounts/{accountId}/timeentries/{id}` with the full entry and `endTime` set |
-| entries in a range | `GET /accounts/{accountId}/timeentries?userId=&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` |
-| projects you can track | `GET /accounts/{accountId}/timeentries/projects?userId=` |
+| entries in a range | `GET /accounts/{accountId}/timeentries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` |
+| projects you can track | `GET /accounts/{accountId}/timeentries/projects` |
 | tasks of a project | `GET /accounts/{accountId}/tasks?ProjectList={id}` (PascalCase query, repeat key for arrays, no text search, 206 at 500 items) |
 | delete entry (later) | `DELETE /accounts/{accountId}/timeentries/{id}` |
 
@@ -57,6 +57,7 @@ API facts that shape the code:
 - A new entry overwrites the entries it overlaps. Starting a timer closes the running one.
 - `PUT` replaces the whole entry: send every field back, not only `endTime`.
 - The account is `activeAccountId` from `/user`. There is no separate accounts endpoint.
+- `userId` is optional on every route and defaults to the token owner, so the client never sends it.
 - Not verified yet: `/latest` with no entries (null or 204), and whether `endDate` is inclusive.
 
 ## Product decisions
