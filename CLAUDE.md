@@ -1,7 +1,7 @@
 # tmetric-cli
 
 Unofficial CLI and TUI for TMetric time tracking, in Go. Binary: `tmetric`.
-Module: `github.com/othercodes/tmetric-cli` (go 1.23).
+Module: `github.com/othercodes/tmetric-cli` (go 1.26).
 
 ## Working rules
 

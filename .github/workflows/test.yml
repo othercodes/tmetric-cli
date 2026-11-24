@@ -63,7 +63,7 @@ jobs:
       fail-fast: false
       matrix:
         # The minimum in go.mod, and the latest release.
-        go-version: ["1.23.x", "stable"]
+        go-version: ["1.26.x", "stable"]
 
     steps:
       - name: Checkout
