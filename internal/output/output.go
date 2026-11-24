@@ -101,6 +101,20 @@ func alignedTable(w io.Writer, styler Styler, header []string, rows [][]string) 
 		_, err := fmt.Fprintln(w, styler.Dim("(none)"))
 		return err
 	}
+	widths := columnWidths(header, rows)
+	if _, err := fmt.Fprintln(w, alignRow(header, widths, styler.Dim)); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, err := fmt.Fprintln(w, alignRow(row, widths, func(s string) string { return s })); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// columnWidths is the visible width of the widest cell in each column.
+func columnWidths(header []string, rows [][]string) []int {
 	widths := make([]int, len(header))
 	for i, cell := range header {
 		widths[i] = visibleWidth(cell)
@@ -112,29 +126,22 @@ func alignedTable(w io.Writer, styler Styler, header []string, rows [][]string) 
 			}
 		}
 	}
-	writeRow := func(cells []string, style func(string) string) error {
-		var b strings.Builder
-		for i, cell := range cells {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			b.WriteString(style(cell))
-			if i < len(cells)-1 {
-				b.WriteString(strings.Repeat(" ", widths[i]-visibleWidth(cell)))
-			}
+	return widths
+}
+
+// alignRow pads every cell but the last to its column width.
+func alignRow(cells []string, widths []int, style func(string) string) string {
+	var b strings.Builder
+	for i, cell := range cells {
+		if i > 0 {
+			b.WriteString("  ")
 		}
-		_, err := fmt.Fprintln(w, b.String())
-		return err
-	}
-	if err := writeRow(header, styler.Dim); err != nil {
-		return err
-	}
-	for _, row := range rows {
-		if err := writeRow(row, func(s string) string { return s }); err != nil {
-			return err
+		b.WriteString(style(cell))
+		if i < len(cells)-1 {
+			b.WriteString(strings.Repeat(" ", widths[i]-visibleWidth(cell)))
 		}
 	}
-	return nil
+	return b.String()
 }
 
 // KeyValues writes an aligned two-column key/value listing (used for detail
