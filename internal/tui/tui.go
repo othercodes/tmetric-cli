@@ -198,65 +198,77 @@ func (m model) reload() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Every answer of the API carries its error: a failed call shows in the
+	// footer and changes nothing else.
+	if result, ok := msg.(loadResult); ok && result.failure() != nil {
+		return m.fail(result.failure()), nil
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		return m.layout(), nil
 	case tick:
-		if !m.statusEnd.IsZero() && m.session.Now().After(m.statusEnd) {
-			m.status, m.statusEnd = "", time.Time{}
-		}
-		m = m.fill()
-		cmds := []tea.Cmd{tickEvery()}
-		if title := m.windowTitle(); title != m.title {
-			m.title = title
-			cmds = append(cmds, tea.SetWindowTitle(title))
-		}
-		return m, tea.Batch(cmds...)
+		return m.onTick()
+	case acted:
+		return m.onActed(msg)
+	case tea.KeyMsg:
+		return m.updateKey(msg)
+	}
+	return m.apply(msg), nil
+}
+
+// loadResult is an answer of the API.
+type loadResult interface{ failure() error }
+
+func (r timerLoaded) failure() error    { return r.err }
+func (r dayLoaded) failure() error      { return r.err }
+func (r weekLoaded) failure() error     { return r.err }
+func (r projectsLoaded) failure() error { return r.err }
+func (r tasksLoaded) failure() error    { return r.err }
+
+// apply stores a successful answer of the API.
+func (m model) apply(msg tea.Msg) model {
+	switch msg := msg.(type) {
 	case timerLoaded:
-		if msg.err != nil {
-			return m.fail(msg.err), nil
-		}
 		m.running = msg.entry
-		return m, nil
 	case dayLoaded:
-		if msg.err != nil {
-			return m.fail(msg.err), nil
-		}
 		// A slow answer for a day the user has already left is dropped.
 		if msg.day.Equal(m.day) {
 			m.dayReport = msg.report
 		}
-		return m.fill(), nil
 	case weekLoaded:
-		if msg.err != nil {
-			return m.fail(msg.err), nil
-		}
 		if msg.start.Equal(m.week) {
 			m.weekRep = msg.report
 		}
-		return m.fill(), nil
 	case projectsLoaded:
-		if msg.err != nil {
-			return m.fail(msg.err), nil
-		}
 		m.projects = msg.projects
-		return m.fill(), nil
 	case tasksLoaded:
-		if msg.err != nil {
-			return m.fail(msg.err), nil
-		}
 		m.form = m.form.withTasks(msg.projectID, msg.tasks)
-		return m, nil
-	case acted:
-		if msg.err != nil {
-			return m.fail(msg.err), m.reload()
-		}
-		return m.notify(msg.notice), m.reload()
-	case tea.KeyMsg:
-		return m.updateKey(msg)
 	}
-	return m, nil
+	return m.fill()
+}
+
+// onTick redraws the clock, clears an old notice and keeps the window title
+// in step with the timer.
+func (m model) onTick() (tea.Model, tea.Cmd) {
+	if !m.statusEnd.IsZero() && m.session.Now().After(m.statusEnd) {
+		m.status, m.statusEnd = "", time.Time{}
+	}
+	m = m.fill()
+	cmds := []tea.Cmd{tickEvery()}
+	if title := m.windowTitle(); title != m.title {
+		m.title = title
+		cmds = append(cmds, tea.SetWindowTitle(title))
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// onActed reports a finished start or stop and reloads what it changed.
+func (m model) onActed(msg acted) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		return m.fail(msg.err), m.reload()
+	}
+	return m.notify(msg.notice), m.reload()
 }
 
 func (m model) notify(notice string) model {
