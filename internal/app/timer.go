@@ -42,10 +42,30 @@ func (s *Session) Start(ctx context.Context, opts StartOptions) (started, stoppe
 			return nil, nil, err
 		}
 	}
+	return s.begin(ctx, entry)
+}
+
+// Continue starts a timer now with the description, project and task of
+// entry. The task goes back whole, so a link to an external task stays.
+func (s *Session) Continue(ctx context.Context, entry *tmetric.TimeEntry) (started, stopped *tmetric.TimeEntry, err error) {
+	next := tmetric.TimeEntry{StartTime: s.now(), Note: entry.Note}
+	if entry.Project != nil {
+		next.Project = &tmetric.Project{ID: entry.Project.ID, Name: entry.Project.Name}
+	}
+	if entry.Task != nil {
+		task := *entry.Task
+		task.Project = nil
+		next.Task = &task
+	}
+	return s.begin(ctx, next)
+}
+
+// begin creates the open entry and finds it in the answer, after noting the
+// timer that ran, which TMetric closes.
+func (s *Session) begin(ctx context.Context, entry tmetric.TimeEntry) (started, stopped *tmetric.TimeEntry, err error) {
 	if stopped, err = s.Running(ctx); err != nil {
 		return nil, nil, err
 	}
-
 	entries, err := s.Client.CreateEntry(ctx, s.accountID(), entry)
 	if err != nil {
 		return nil, nil, err
@@ -58,6 +78,22 @@ func (s *Session) Start(ctx context.Context, opts StartOptions) (started, stoppe
 		}
 	}
 	return nil, nil, errors.New("the timer may have started, but the API did not return it: check `tmetric timer status`")
+}
+
+// OpenTasks are the tasks of a project a timer can point at: not completed,
+// and not external (an external task has no ID).
+func (s *Session) OpenTasks(ctx context.Context, projectID int64) ([]tmetric.Task, error) {
+	all, err := s.Client.Tasks(ctx, s.accountID(), projectID)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []tmetric.Task
+	for _, t := range all {
+		if t.ID != nil && !t.IsCompleted {
+			tasks = append(tasks, t)
+		}
+	}
+	return tasks, nil
 }
 
 // Stopped is a timer that Stop ended.
@@ -108,17 +144,9 @@ func (s *Session) findProject(ctx context.Context, ref string) (*tmetric.Project
 }
 
 func (s *Session) findTask(ctx context.Context, projectID int64, ref string) (*tmetric.Task, error) {
-	all, err := s.Client.Tasks(ctx, s.accountID(), projectID)
+	tasks, err := s.OpenTasks(ctx, projectID)
 	if err != nil {
 		return nil, err
-	}
-	// Completed and external (no ID) tasks are not offered: the timer needs
-	// an open task it can point at.
-	var tasks []tmetric.Task
-	for _, t := range all {
-		if t.ID != nil && !t.IsCompleted {
-			tasks = append(tasks, t)
-		}
 	}
 	names := make([]string, len(tasks))
 	for i, t := range tasks {

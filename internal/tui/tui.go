@@ -1,0 +1,516 @@
+// Package tui is the interactive front-end launched by `tmetric ui`. It reads
+// through internal/app, never through the cobra commands. docs/tui-design.md
+// describes how it looks and behaves.
+package tui
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/othercodes/tmetric-cli/internal/app"
+	"github.com/othercodes/tmetric-cli/internal/output"
+	"github.com/othercodes/tmetric-cli/internal/tmetric"
+)
+
+// Run draws the UI until the user quits or ctx is cancelled. opts let tests
+// feed keys in and throw the drawing away.
+func Run(ctx context.Context, session *app.Session, opts ...tea.ProgramOption) error {
+	opts = append([]tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx)}, opts...)
+	_, err := tea.NewProgram(newModel(ctx, session), opts...).Run()
+	if errors.Is(err, tea.ErrProgramKilled) {
+		return ctx.Err()
+	}
+	return err
+}
+
+// Screens, views, tabs, focus and overlays.
+const (
+	mainScreen = iota
+	accountScreen
+)
+
+const (
+	entriesView = iota
+	projectsView
+)
+
+var viewNames = []string{"Time entries", "Projects"}
+
+const (
+	dayTab = iota
+	weekTab
+)
+
+const (
+	panelFocus = iota
+	sidebarFocus
+)
+
+const (
+	noOverlay = iota
+	formOverlay
+	helpOverlay
+)
+
+// statusFor is how long a notice or an error replaces the footer.
+const statusFor = 5 * time.Second
+
+// Messages from the API calls and the clock.
+type (
+	timerLoaded struct {
+		entry *tmetric.TimeEntry
+		err   error
+	}
+	dayLoaded struct {
+		day    time.Time
+		report *app.Report
+		err    error
+	}
+	weekLoaded struct {
+		start  time.Time
+		report *app.Report
+		err    error
+	}
+	projectsLoaded struct {
+		projects []tmetric.Project
+		err      error
+	}
+	tasksLoaded struct {
+		projectID int64
+		tasks     []tmetric.Task
+		err       error
+	}
+	// acted is a finished start or stop, after which the data reloads.
+	acted struct {
+		notice string
+		err    error
+	}
+	tick struct{}
+)
+
+// confirmation is an action that would stop the running timer, held until
+// the user says yes.
+type confirmation struct {
+	question string
+	action   tea.Cmd
+}
+
+type model struct {
+	ctx     context.Context
+	session *app.Session
+
+	width, height int
+
+	screen, view, tab, focus, overlay int
+
+	running   *tmetric.TimeEntry
+	day       time.Time
+	dayReport *app.Report
+	week      time.Time
+	weekRep   *app.Report
+	projects  []tmetric.Project
+
+	dayTable, weekTable, projectTable table.Model
+
+	filtering bool
+	filter    textinput.Model
+
+	form form
+
+	status    string
+	statusErr bool
+	statusEnd time.Time
+
+	// confirm, when set, is an action waiting for a y in the footer.
+	confirm *confirmation
+
+	title string
+}
+
+func newModel(ctx context.Context, session *app.Session) model {
+	filter := textinput.New()
+	filter.Prompt = "/"
+	filter.Cursor.SetMode(cursor.CursorStatic)
+	today := session.Midnight()
+	m := model{
+		ctx: ctx, session: session,
+		width: 100, height: 30,
+		day: today, week: session.WeekStart(today),
+		dayTable: newTable(), weekTable: newTable(), projectTable: newTable(),
+		filter: filter,
+	}
+	return m.layout()
+}
+
+func (m model) Init() tea.Cmd {
+	return tea.Batch(m.loadTimer, m.loadDay(m.day), m.loadWeek(m.week), m.loadProjects, tickEvery())
+}
+
+// tickInterval is how often the clock redraws; tests shorten it.
+var tickInterval = time.Second
+
+func tickEvery() tea.Cmd {
+	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return tick{} })
+}
+
+func (m model) loadTimer() tea.Msg {
+	entry, err := m.session.Running(m.ctx)
+	return timerLoaded{entry, err}
+}
+
+func (m model) loadDay(day time.Time) tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.session.Day(m.ctx, day)
+		return dayLoaded{day, report, err}
+	}
+}
+
+func (m model) loadWeek(start time.Time) tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.session.WeekOf(m.ctx, start)
+		return weekLoaded{start, report, err}
+	}
+}
+
+func (m model) loadProjects() tea.Msg {
+	projects, err := m.session.Projects(m.ctx)
+	return projectsLoaded{projects, err}
+}
+
+func (m model) loadTasks(projectID int64) tea.Cmd {
+	return func() tea.Msg {
+		tasks, err := m.session.OpenTasks(m.ctx, projectID)
+		return tasksLoaded{projectID, tasks, err}
+	}
+}
+
+// reload refreshes what a start or stop can change.
+func (m model) reload() tea.Cmd {
+	return tea.Batch(m.loadTimer, m.loadDay(m.day), m.loadWeek(m.week))
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		return m.layout(), nil
+	case tick:
+		if !m.statusEnd.IsZero() && m.session.Now().After(m.statusEnd) {
+			m.status, m.statusEnd = "", time.Time{}
+		}
+		m = m.fill()
+		cmds := []tea.Cmd{tickEvery()}
+		if title := m.windowTitle(); title != m.title {
+			m.title = title
+			cmds = append(cmds, tea.SetWindowTitle(title))
+		}
+		return m, tea.Batch(cmds...)
+	case timerLoaded:
+		if msg.err != nil {
+			return m.fail(msg.err), nil
+		}
+		m.running = msg.entry
+		return m, nil
+	case dayLoaded:
+		if msg.err != nil {
+			return m.fail(msg.err), nil
+		}
+		// A slow answer for a day the user has already left is dropped.
+		if msg.day.Equal(m.day) {
+			m.dayReport = msg.report
+		}
+		return m.fill(), nil
+	case weekLoaded:
+		if msg.err != nil {
+			return m.fail(msg.err), nil
+		}
+		if msg.start.Equal(m.week) {
+			m.weekRep = msg.report
+		}
+		return m.fill(), nil
+	case projectsLoaded:
+		if msg.err != nil {
+			return m.fail(msg.err), nil
+		}
+		m.projects = msg.projects
+		return m.fill(), nil
+	case tasksLoaded:
+		if msg.err != nil {
+			return m.fail(msg.err), nil
+		}
+		m.form = m.form.withTasks(msg.projectID, msg.tasks)
+		return m, nil
+	case acted:
+		if msg.err != nil {
+			return m.fail(msg.err), m.reload()
+		}
+		return m.notify(msg.notice), m.reload()
+	case tea.KeyMsg:
+		return m.updateKey(msg)
+	}
+	return m, nil
+}
+
+func (m model) notify(notice string) model {
+	m.status, m.statusErr, m.statusEnd = notice, false, m.session.Now().Add(statusFor)
+	return m
+}
+
+func (m model) fail(err error) model {
+	m.status, m.statusErr, m.statusEnd = "error: "+err.Error(), true, m.session.Now().Add(statusFor)
+	return m
+}
+
+// guard runs action now, or first asks when it would stop the running
+// timer: TMetric closes it on the spot, and the CLI cannot undo that. next
+// names what starts instead, if anything.
+func (m model) guard(action tea.Cmd, next string) (tea.Model, tea.Cmd) {
+	if m.running == nil {
+		return m, action
+	}
+	question := "Stop " + output.Describe(m.running) + " (" + output.Duration(m.session.Elapsed(m.running)) + ")"
+	if next != "" {
+		question += " and start " + next
+	}
+	m.confirm = &confirmation{question: question + "?", action: action}
+	return m, nil
+}
+
+func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirm != nil {
+		action := m.confirm.action
+		m.confirm = nil
+		if msg.String() == "y" {
+			return m, action
+		}
+		return m.notify("Cancelled."), nil
+	}
+	switch {
+	case m.overlay == formOverlay:
+		return m.updateForm(msg)
+	case m.overlay == helpOverlay:
+		if key.Matches(msg, keyBack, keyHelp, keyQuit) {
+			m.overlay = noOverlay
+		}
+		return m, nil
+	case m.filtering:
+		return m.updateFilter(msg)
+	}
+
+	switch {
+	case key.Matches(msg, keyQuit):
+		return m, tea.Sequence(tea.SetWindowTitle("tmetric"), tea.Quit)
+	case key.Matches(msg, keyHelp):
+		m.overlay = helpOverlay
+		return m, nil
+	case key.Matches(msg, keyRefresh):
+		return m, tea.Batch(m.reload(), m.loadProjects)
+	case key.Matches(msg, keyStop):
+		return m.guard(m.stop, "")
+	case key.Matches(msg, keyNew):
+		return m.openForm(nil)
+	case key.Matches(msg, keyAccount):
+		m.screen = accountScreen
+		return m, nil
+	case key.Matches(msg, keyBack):
+		m.screen = mainScreen
+		return m, nil
+	}
+	if m.screen == accountScreen {
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, keyViews):
+		m.view = int(msg.String()[0] - '1')
+		return m.layout(), nil
+	case key.Matches(msg, keyFocus):
+		m.focus = 1 - m.focus
+		return m.layout(), nil
+	}
+	if m.focus == sidebarFocus {
+		if key.Matches(msg, keyMove) {
+			m.view = (m.view + step(msg) + len(viewNames)) % len(viewNames)
+			return m.layout(), nil
+		}
+		return m, nil
+	}
+	if m.view == projectsView {
+		return m.updateProjects(msg)
+	}
+	return m.updateEntries(msg)
+}
+
+func (m model) updateEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keyTabs):
+		m.tab = 1 - m.tab
+		return m.layout(), nil
+	case key.Matches(msg, keyToday):
+		today := m.session.Midnight()
+		return m.goTo(today, m.session.WeekStart(today))
+	case key.Matches(msg, keyDay):
+		if m.tab == weekTab {
+			return m.goTo(m.day, m.week.AddDate(0, 0, 7*step(msg)))
+		}
+		day := m.day.AddDate(0, 0, step(msg))
+		return m.goTo(day, m.session.WeekStart(day))
+	case key.Matches(msg, keyOpenDay) && m.tab == weekTab:
+		m.tab = dayTab
+		day := m.week.AddDate(0, 0, m.weekTable.Cursor())
+		next, cmd := m.goTo(day, m.week)
+		return next.(model).layout(), cmd
+	case key.Matches(msg, keyContinue) && m.tab == dayTab:
+		if m.dayReport == nil || len(m.dayReport.Entries) == 0 {
+			return m, nil
+		}
+		entry := m.dayReport.Entries[m.dayTable.Cursor()]
+		return m.guard(m.continueEntry(&entry), output.Describe(&entry))
+	case key.Matches(msg, keyOpenDay):
+		// enter on an entry is kept for opening it (#7); it never changes data.
+		return m, nil
+	}
+	var cmd tea.Cmd
+	if m.tab == weekTab {
+		m.weekTable, cmd = m.weekTable.Update(msg)
+	} else {
+		m.dayTable, cmd = m.dayTable.Update(msg)
+	}
+	return m, cmd
+}
+
+// goTo shows day in the Day tab and the week starting on week, loading what
+// changed.
+func (m model) goTo(day, week time.Time) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	if !day.Equal(m.day) {
+		m.day, m.dayReport = day, nil
+		cmds = append(cmds, m.loadDay(day))
+	}
+	if !week.Equal(m.week) {
+		m.week, m.weekRep = week, nil
+		cmds = append(cmds, m.loadWeek(week))
+	}
+	return m.fill(), tea.Batch(cmds...)
+}
+
+func (m model) updateProjects(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keyFilter):
+		m.filtering = true
+		return m, m.filter.Focus()
+	case key.Matches(msg, keyStart):
+		project := m.selectedProject()
+		if project == nil {
+			return m, nil
+		}
+		return m.openForm(project)
+	}
+	var cmd tea.Cmd
+	m.projectTable, cmd = m.projectTable.Update(msg)
+	return m, cmd
+}
+
+func (m model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keyBack):
+		m.filtering = false
+		m.filter.Blur()
+		m.filter.SetValue("")
+		return m.fill(), nil
+	case key.Matches(msg, keyStart):
+		m.filtering = false
+		m.filter.Blur()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	m.projectTable.SetCursor(0)
+	return m.fill(), cmd
+}
+
+// visibleProjects are the projects whose name holds the filter.
+func (m model) visibleProjects() []tmetric.Project {
+	query := strings.ToLower(strings.TrimSpace(m.filter.Value()))
+	var shown []tmetric.Project
+	for _, p := range m.projects {
+		if strings.Contains(strings.ToLower(p.Name), query) {
+			shown = append(shown, p)
+		}
+	}
+	return shown
+}
+
+func (m model) selectedProject() *tmetric.Project {
+	shown := m.visibleProjects()
+	if len(shown) == 0 {
+		return nil
+	}
+	return &shown[m.projectTable.Cursor()]
+}
+
+func (m model) stop() tea.Msg {
+	stopped, err := m.session.Stop(m.ctx)
+	switch {
+	case err != nil:
+		return acted{err: err}
+	case stopped == nil:
+		return acted{notice: "No timer running."}
+	case stopped.Dropped:
+		return acted{notice: "Stopped " + output.Describe(stopped.Entry) + "; TMetric dropped it (shorter than a minute)."}
+	default:
+		return acted{notice: "Stopped " + output.Describe(stopped.Entry) + " (" + output.Duration(m.session.Elapsed(stopped.Entry)) + ")"}
+	}
+}
+
+func (m model) continueEntry(entry *tmetric.TimeEntry) tea.Cmd {
+	return func() tea.Msg {
+		started, stopped, err := m.session.Continue(m.ctx, entry)
+		return startedMsg(started, stopped, err)
+	}
+}
+
+func (m model) start(opts app.StartOptions) tea.Cmd {
+	return func() tea.Msg {
+		started, stopped, err := m.session.Start(m.ctx, opts)
+		return startedMsg(started, stopped, err)
+	}
+}
+
+func startedMsg(started, stopped *tmetric.TimeEntry, err error) acted {
+	if err != nil {
+		return acted{err: err}
+	}
+	notice := "Started " + output.Describe(started)
+	if stopped != nil {
+		notice += ", stopped " + output.Describe(stopped)
+	}
+	return acted{notice: notice}
+}
+
+// windowTitle is what the terminal window shows while the UI runs.
+func (m model) windowTitle() string {
+	if m.running == nil {
+		return "tmetric"
+	}
+	return "● " + output.Duration(m.session.Elapsed(m.running)) + " · " + output.Note(m.running)
+}
+
+func id(n int64) string { return strconv.FormatInt(n, 10) }
+
+// step is -1 for the keys that go back (up, left) and 1 for the others.
+func step(msg tea.KeyMsg) int {
+	switch msg.String() {
+	case "up", "k", "left", "h":
+		return -1
+	}
+	return 1
+}

@@ -246,3 +246,35 @@ func TestStopWithoutTimer(t *testing.T) {
 		t.Error("a failed update should be reported")
 	}
 }
+
+func TestContinueKeepsProjectAndTask(t *testing.T) {
+	session, fake := newFake(t, map[string]string{
+		latest: "null",
+		create: `[{"id":2,"startTime":"2026-11-24T14:30:00","endTime":null}]`,
+	})
+	var entry tmetric.TimeEntry
+	// An external task, with no ID, must keep its link; its project is not sent.
+	_ = json.Unmarshal([]byte(`{"note":"TMET-1","project":{"id":5,"name":"CLI","client":{"name":"Acme"}},
+		"task":{"name":"TMET-1","externalLink":{"link":"https://x"},"project":{"id":5}}}`), &entry)
+	started, _, err := session.Continue(context.Background(), &entry)
+	if err != nil || started.ID != 2 {
+		t.Fatalf("started = %+v, err = %v", started, err)
+	}
+	want := `{"startTime":"2026-11-24T14:30:45","endTime":null,"note":"TMET-1","project":{"id":5,"name":"CLI"},"task":{"name":"TMET-1","externalLink":{"link":"https://x"}}}`
+	if got := fake.bodies[create]; got != want {
+		t.Errorf("body =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestContinueWithoutProject(t *testing.T) {
+	session, fake := newFake(t, map[string]string{
+		latest: "null",
+		create: `[{"id":2,"startTime":"2026-11-24T14:30:00","endTime":null}]`,
+	})
+	if _, _, err := session.Continue(context.Background(), &tmetric.TimeEntry{Note: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.bodies[create]; got != `{"startTime":"2026-11-24T14:30:45","endTime":null,"note":"x"}` {
+		t.Errorf("body = %s", got)
+	}
+}

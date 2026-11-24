@@ -113,7 +113,7 @@ func entryRows(session *app.Session, entries []tmetric.TimeEntry, withDate bool)
 			end = entry.EndTime.In(session.Location).Format("15:04")
 		}
 		row := []string{start.Format("15:04"), end, output.Duration(session.Elapsed(entry)),
-			projectOf(entry), taskOf(entry), noteOf(entry)}
+			output.Project(entry), output.Task(entry), output.Note(entry)}
 		if withDate {
 			row = append([]string{start.Format("Mon 02")}, row...)
 		}

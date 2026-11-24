@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/othercodes/tmetric-cli/internal/app"
 	"github.com/othercodes/tmetric-cli/internal/auth"
 	"github.com/othercodes/tmetric-cli/internal/tmetric"
 	"github.com/zalando/go-keyring"
@@ -379,4 +381,24 @@ func TestDevNullIsNoTerminal(t *testing.T) {
 	if _, stderr, code := runCLI(t, "login"); code != 2 || !strings.Contains(stderr, "no token on stdin") {
 		t.Errorf("code = %d, stderr = %q", code, stderr)
 	}
+}
+
+func TestUI(t *testing.T) {
+	expect(t, []string{"ui"}, 2, nil, []string{"needs an interactive terminal"})
+
+	oldTerminal, oldRun := uiOnTerminal, runTUI
+	t.Cleanup(func() { uiOnTerminal, runTUI = oldTerminal, oldRun })
+	uiOnTerminal = func() bool { return true }
+	ran := false
+	runTUI = func(ctx context.Context, session *app.Session, _ ...tea.ProgramOption) error {
+		ran = session.User.Name == "Ada"
+		return nil
+	}
+	timerAPI(t, map[string]string{})
+	expect(t, []string{"ui"}, 0, nil, nil)
+	if !ran {
+		t.Error("ui should run the TUI with the signed-in session")
+	}
+	t.Setenv(tokenEnv, "")
+	expect(t, []string{"ui"}, 1, nil, []string{"not signed in"})
 }
