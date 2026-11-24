@@ -7,6 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	// The TMetric timezone must load on machines without a zone database,
+	// such as Windows.
+	_ "time/tzdata"
 
 	"github.com/othercodes/tmetric-cli/internal/cmd"
 )

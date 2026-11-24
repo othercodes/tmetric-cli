@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/othercodes/tmetric-cli/internal/app"
 	"github.com/othercodes/tmetric-cli/internal/auth"
 	"github.com/othercodes/tmetric-cli/internal/output"
 	"github.com/othercodes/tmetric-cli/internal/tmetric"
@@ -57,6 +58,7 @@ a pipe, and --json where structured output is useful.`,
 		newLoginCmd(flags),
 		newLogoutCmd(flags),
 		newWhoamiCmd(flags),
+		newTimerCmd(flags),
 	)
 	return root
 }
@@ -81,7 +83,8 @@ func exitCode(err error) int {
 	styler := output.NewStyler(os.Stderr)
 	fmt.Fprintln(os.Stderr, styler.Red("error:")+" "+renderError(err))
 	var usageErr *usageError
-	if errors.As(err, &usageErr) {
+	var appUsageErr *app.UsageError
+	if errors.As(err, &usageErr) || errors.As(err, &appUsageErr) {
 		return 2
 	}
 	return 1

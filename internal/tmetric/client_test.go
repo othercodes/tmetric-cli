@@ -155,7 +155,9 @@ func TestCreateEntry(t *testing.T) {
 }
 
 func TestUpdateEntrySendsEverythingBack(t *testing.T) {
-	c, seen := fakeAPI(t, 200, `{"id":10,"startTime":"2026-11-23T09:00:00","endTime":"2026-11-23T10:00:00"}`)
+	// The API answers with every entry of the day, the updated one among them.
+	c, seen := fakeAPI(t, 200, `[{"id":9,"startTime":"2026-11-23T08:00:00","endTime":"2026-11-23T09:00:00"},
+		{"id":10,"startTime":"2026-11-23T09:00:00","endTime":"2026-11-23T10:00:00"}]`)
 	var entry TimeEntry
 	// An external task and tags must survive the round trip untouched.
 	original := `{"id":10,"startTime":"2026-11-23T09:00:00","endTime":null,"note":"n",
@@ -178,7 +180,7 @@ func TestUpdateEntrySendsEverythingBack(t *testing.T) {
 	if seen.body != want {
 		t.Errorf("body =\n%s\nwant\n%s", seen.body, want)
 	}
-	if updated.EndTime == nil {
+	if len(updated) != 2 || updated[1].EndTime == nil {
 		t.Errorf("updated = %+v", updated)
 	}
 }
