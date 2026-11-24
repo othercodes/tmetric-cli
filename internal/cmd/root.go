@@ -62,6 +62,7 @@ a pipe, and --json where structured output is useful.`,
 		newTodayCmd(flags),
 		newWeekCmd(flags),
 		newProjectsCmd(flags),
+		newUICmd(flags),
 	)
 	return root
 }

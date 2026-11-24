@@ -18,15 +18,29 @@ type Report struct {
 
 // Today is what was tracked today, in the user's timezone.
 func (s *Session) Today(ctx context.Context) (*Report, error) {
-	today := s.today()
-	return s.report(ctx, today, today)
+	return s.Day(ctx, s.Midnight())
 }
 
-// Week is what was tracked this week, which starts on the workspace's first
-// day of the week.
+// Week is what was tracked this week.
 func (s *Session) Week(ctx context.Context) (*Report, error) {
-	from := WeekStart(s.today(), s.firstWeekDay())
+	return s.WeekOf(ctx, s.Midnight())
+}
+
+// Day is what was tracked on the day of day.
+func (s *Session) Day(ctx context.Context, day time.Time) (*Report, error) {
+	return s.report(ctx, day, day)
+}
+
+// WeekOf is what was tracked in the week that holds day, which starts on the
+// workspace's first day of the week.
+func (s *Session) WeekOf(ctx context.Context, day time.Time) (*Report, error) {
+	from := s.WeekStart(day)
 	return s.report(ctx, from, from.AddDate(0, 0, 6))
+}
+
+// WeekStart is the first day of the workspace's week that holds day.
+func (s *Session) WeekStart(day time.Time) time.Time {
+	return WeekStart(day, s.FirstWeekDay())
 }
 
 // Projects are the projects the user can track time on.
@@ -52,19 +66,27 @@ func (s *Session) report(ctx context.Context, from, to time.Time) (*Report, erro
 	return report, nil
 }
 
-// today is midnight today in the user's timezone.
-func (s *Session) today() time.Time {
+// Midnight is midnight today in the user's timezone.
+func (s *Session) Midnight() time.Time {
 	now := s.Now().In(s.Location)
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.Location)
 }
 
-// firstWeekDay is the active workspace's first day of the week, Monday when
-// the workspace is not in the user's list.
-func (s *Session) firstWeekDay() time.Weekday {
-	for _, account := range s.User.Accounts {
-		if account.ID == s.User.ActiveAccountID {
-			return account.FirstWeekDay
+// Account is the active workspace, or nil when it is not in the user's list.
+func (s *Session) Account() *tmetric.Account {
+	for i := range s.User.Accounts {
+		if s.User.Accounts[i].ID == s.User.ActiveAccountID {
+			return &s.User.Accounts[i]
 		}
+	}
+	return nil
+}
+
+// FirstWeekDay is the active workspace's first day of the week, Monday when
+// the workspace is not in the user's list.
+func (s *Session) FirstWeekDay() time.Weekday {
+	if account := s.Account(); account != nil {
+		return account.FirstWeekDay
 	}
 	return time.Monday
 }

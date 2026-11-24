@@ -39,8 +39,9 @@ How `tmetric ui` looks and behaves. Follow it for every screen in `internal/tui`
 |---|---|
 | `↑`/`↓` (`k`/`j`) | Move in the focused list |
 | `tab` | Move the focus between sidebar and panel |
+| `1`…`9` | Jump to a view of the sidebar (listed only in `?`, next to each view's name) |
 | `[` / `]` | Previous / next tab |
-| `enter` | The main action on the selected row |
+| `enter` | Open the selected row; it never changes data |
 | `n` | New |
 | `e` | Edit |
 | `d` | Delete (asks for confirmation) |
@@ -50,6 +51,9 @@ How `tmetric ui` looks and behaves. Follow it for every screen in `internal/tui`
 | `esc` | Back, or close an overlay |
 | `?` | Keybindings help |
 | `q` | Quit |
+
+An action that stops or deletes tracked time asks first, in the footer: `Stop "standup" (1h30m)? y/N`.
+`y` confirms; any other key cancels. An action that loses nothing (starting with no timer running) does not ask.
 
 ## Colors
 

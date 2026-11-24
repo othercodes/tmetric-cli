@@ -81,9 +81,9 @@ func newTimerStatusCmd(flags *rootFlags) *cobra.Command {
 				return nil
 			}
 			return output.KeyValues(os.Stdout, [][2]string{
-				{"description", noteOf(running)},
-				{"project", projectOf(running)},
-				{"task", taskOf(running)},
+				{"description", output.Note(running)},
+				{"project", output.Project(running)},
+				{"task", output.Task(running)},
 				{"started", running.StartTime.In(session.Location).Format("15:04")},
 				{"elapsed", output.Duration(session.Elapsed(running))},
 			})
@@ -119,9 +119,9 @@ func newTimerStartCmd(flags *rootFlags) *cobra.Command {
 			if stopped != nil {
 				// The API closed it at our start time, which is now.
 				stopped.EndTime = &started.StartTime
-				fmt.Fprintf(os.Stderr, "Stopped %s %s\n", describe(stopped), styler.Dim("("+output.Duration(session.Elapsed(stopped))+")"))
+				fmt.Fprintf(os.Stderr, "Stopped %s %s\n", output.Describe(stopped), styler.Dim("("+output.Duration(session.Elapsed(stopped))+")"))
 			}
-			fmt.Fprintf(os.Stderr, "Started %s %s\n", describe(started),
+			fmt.Fprintf(os.Stderr, "Started %s %s\n", output.Describe(started),
 				styler.Dim("at "+started.StartTime.In(session.Location).Format("15:04")))
 			return nil
 		},
@@ -153,7 +153,7 @@ func newTimerStopCmd(flags *rootFlags) *cobra.Command {
 				return nil
 			}
 			styler := output.NewStyler(os.Stderr)
-			fmt.Fprintf(os.Stderr, "Stopped %s %s\n", describe(stopped.Entry),
+			fmt.Fprintf(os.Stderr, "Stopped %s %s\n", output.Describe(stopped.Entry),
 				styler.Dim("("+output.Duration(session.Elapsed(stopped.Entry))+")"))
 			if stopped.Dropped {
 				fmt.Fprintln(os.Stderr, styler.Dim("TMetric did not keep it: entries shorter than a minute are dropped."))
@@ -161,37 +161,4 @@ func newTimerStopCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// describe is the one-line summary of an entry: "note · project / task".
-func describe(entry *tmetric.TimeEntry) string {
-	text := `"` + noteOf(entry) + `"`
-	if entry.Project != nil {
-		text += " · " + entry.Project.Name
-	}
-	if entry.Task != nil && entry.Task.Name != "" {
-		text += " / " + entry.Task.Name
-	}
-	return text
-}
-
-func noteOf(entry *tmetric.TimeEntry) string {
-	if entry.Note == "" {
-		return "(no description)"
-	}
-	return entry.Note
-}
-
-func projectOf(entry *tmetric.TimeEntry) string {
-	if entry.Project == nil {
-		return "-"
-	}
-	return entry.Project.Name
-}
-
-func taskOf(entry *tmetric.TimeEntry) string {
-	if entry.Task == nil || entry.Task.Name == "" {
-		return "-"
-	}
-	return entry.Task.Name
 }
