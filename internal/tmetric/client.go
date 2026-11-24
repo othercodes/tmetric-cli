@@ -169,15 +169,15 @@ func (c *Client) CreateEntry(ctx context.Context, accountID int64, entry TimeEnt
 }
 
 // UpdateEntry replaces a time entry with entry: send every field back, not
-// only the ones that change.
-func (c *Client) UpdateEntry(ctx context.Context, accountID int64, entry TimeEntry) (*TimeEntry, error) {
+// only the ones that change. The API stores it under a new ID and, like
+// CreateEntry, answers with every entry of the days involved; an entry
+// shorter than a minute is dropped instead of stored.
+func (c *Client) UpdateEntry(ctx context.Context, accountID int64, entry TimeEntry) ([]TimeEntry, error) {
 	path := accountPath(accountID, "/timeentries/"+strconv.FormatInt(entry.ID, 10))
 	entry.ID = 0
-	updated := &TimeEntry{}
-	if _, err := c.do(ctx, http.MethodPut, path, nil, entry, updated); err != nil {
-		return nil, err
-	}
-	return updated, nil
+	var entries []TimeEntry
+	_, err := c.do(ctx, http.MethodPut, path, nil, entry, &entries)
+	return entries, err
 }
 
 // Projects returns the projects the user can track time on.

@@ -48,9 +48,12 @@ API facts that shape the code:
 - There is no timer endpoint. A running timer is a time entry with `endTime: null`.
 - Datetimes have no zone: `2026-11-20T15:00:00`, local time in `user.timeZone.id`. Never send `Z` or an offset: the entry moves to another day. Responses can have fractional seconds.
 - There is no duration field. Duration = `endTime - startTime`, or `now - startTime` while running.
-- `POST timeentries` returns an array with all entries of the affected days. Find the new one by `startTime`.
+- The API cuts every time to the minute: send `14:24:37`, get `14:24:00` back.
+- `POST timeentries` returns an array with all entries of the affected days. The new timer is the one open entry.
 - A new entry overwrites the entries it overlaps. Starting a timer closes the running one.
-- `PUT` replaces the whole entry: send every field back, not only `endTime`.
+- `PUT` replaces the whole entry: send every field back, not only `endTime`. It answers with an array like `POST`
+  (not a single entry, whatever the spec says), and the entry comes back under a **new ID**: find it by `startTime`.
+- An entry shorter than a minute (start and end in the same minute) is dropped, not stored.
 - The account is `activeAccountId` from `/user`. There is no separate accounts endpoint.
 - `userId` is optional on every route and defaults to the token owner, so the client never sends it.
 - Verified on a real account (2026-11-24): `endDate` is inclusive; a running timer comes back from `/latest` with `endTime: null`; an entry with no task has no `task` key.
