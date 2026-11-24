@@ -59,6 +59,9 @@ a pipe, and --json where structured output is useful.`,
 		newLogoutCmd(flags),
 		newWhoamiCmd(flags),
 		newTimerCmd(flags),
+		newTodayCmd(flags),
+		newWeekCmd(flags),
+		newProjectsCmd(flags),
 	)
 	return root
 }
