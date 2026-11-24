@@ -19,7 +19,7 @@ Module: `github.com/othercodes/tmetric-cli` (go 1.26).
 - `internal/app`: what the CLI and the TUI do, free of cobra and rendering.
 - `internal/tmetric`: our own small HTTP client for the TMetric API, with only the calls we use.
 - `internal/output`: tables on a terminal, tab-separated in a pipe, `--json`, CSV on request; honors `NO_COLOR` and `TERM=dumb`. Errors go to stderr.
-- `internal/tui`: Bubble Tea + Lipgloss, reads through `internal/app` only.
+- `internal/tui`: Bubble Tea + Lipgloss, reads through `internal/app` only. Follow @docs/tui-design.md.
 - `internal/auth`: token in the OS keyring (`zalando/go-keyring`), fallback to a 0600 file in `os.UserConfigDir()/tmetric`.
 - GoReleaser + GitHub Actions (`test.yml`, `release.yml`) + SonarCloud.
 
