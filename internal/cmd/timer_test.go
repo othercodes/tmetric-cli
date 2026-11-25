@@ -79,7 +79,7 @@ func TestTimerStart(t *testing.T) {
 		latestRoute: runningEntry,
 		createRoute: `[{"id":2,"startTime":"2026-11-24T14:30:00","endTime":null,"note":"review"}]`,
 	})
-	expect(t, []string{"timer", "start", "review", "PR"}, 0, nil,
+	expect(t, []string{"timer", "start", "review", "PR", "--yes"}, 0, nil,
 		[]string{`Stopped "standup" · CLI / Tests (1h30m)`, `Started "review" at 14:30`})
 
 	timerAPI(t, map[string]string{
@@ -95,11 +95,11 @@ func TestTimerStop(t *testing.T) {
 		latestRoute: runningEntry,
 		updateRoute: `[{"id":1,"startTime":"2026-11-24T13:00:00","endTime":"2026-11-24T14:00:00","note":"standup"}]`,
 	})
-	expect(t, []string{"timer", "stop"}, 0, nil, []string{`Stopped "standup" (1h00m)`})
-	expect(t, []string{"timer", "stop", "--json"}, 0, []string{`"running": false`, `"dropped": false`, `"elapsed_seconds": 3600`}, nil)
+	expect(t, []string{"timer", "stop", "--yes"}, 0, nil, []string{`Stopped "standup" (1h00m)`})
+	expect(t, []string{"timer", "stop", "-y", "--json"}, 0, []string{`"running": false`, `"dropped": false`, `"elapsed_seconds": 3600`}, nil)
 
 	timerAPI(t, map[string]string{latestRoute: runningEntry, updateRoute: `[]`})
-	expect(t, []string{"timer", "stop"}, 0, nil, []string{"entries shorter than a minute are dropped"})
+	expect(t, []string{"timer", "stop", "--yes"}, 0, nil, []string{"entries shorter than a minute are dropped"})
 
 	timerAPI(t, map[string]string{latestRoute: "null"})
 	expect(t, []string{"timer", "stop"}, 0, nil, []string{"No timer running."})
@@ -130,4 +130,39 @@ func TestStartCompletesRecentDescriptions(t *testing.T) {
 	expect(t, []string{"__complete", "timer", "start", ""}, 0, []string{":4\n"}, nil)
 	t.Setenv(tokenEnv, "")
 	expect(t, []string{"__complete", "timer", "start", ""}, 0, []string{":4\n"}, nil)
+}
+
+func TestTimerAsksBeforeStopping(t *testing.T) {
+	timerAPI(t, map[string]string{
+		latestRoute: runningEntry,
+		createRoute: `[{"id":2,"startTime":"2026-11-24T14:30:00","endTime":null,"note":"review"}]`,
+		updateRoute: `[{"id":1,"startTime":"2026-11-24T13:00:00","endTime":"2026-11-24T14:00:00","note":"standup"}]`,
+	})
+	// No terminal to ask on: refused, nothing stopped.
+	withStdin(t, "")
+	expect(t, []string{"timer", "start", "review"}, 2, nil,
+		[]string{`refusing to stop "standup" · CLI / Tests (`, `and start "review" without confirmation; pass --yes`})
+	expect(t, []string{"timer", "stop"}, 2, nil, []string{`refusing to stop "standup" · CLI / Tests (`})
+
+	confirmWith(t, "n\n")
+	expect(t, []string{"timer", "stop"}, 1, nil, []string{"? [y/N] ", "aborted"})
+	confirmWith(t, "y\n")
+	expect(t, []string{"timer", "start", "review"}, 0, nil, []string{`Stop "standup" · CLI / Tests (`, `Started "review"`})
+	confirmWith(t, "y\n")
+	expect(t, []string{"timer", "stop"}, 0, nil, []string{`Stopped "standup"`})
+}
+
+func TestTimerDoesNotAskWhenNothingRuns(t *testing.T) {
+	timerAPI(t, map[string]string{
+		latestRoute: "null",
+		createRoute: `[{"id":2,"startTime":"2026-11-24T14:30:00","endTime":null,"note":"review"}]`,
+	})
+	withStdin(t, "")
+	expect(t, []string{"timer", "start", "review"}, 0, nil, []string{`Started "review"`})
+	expect(t, []string{"timer", "stop"}, 0, nil, []string{"No timer running."})
+}
+
+func TestTimerStopUpdateFails(t *testing.T) {
+	timerAPI(t, map[string]string{latestRoute: runningEntry, updateRoute: "HTTP 500"})
+	expect(t, []string{"timer", "stop", "--yes"}, 1, nil, []string{"HTTP 500"})
 }

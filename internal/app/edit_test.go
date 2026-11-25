@@ -171,3 +171,16 @@ func TestDelete(t *testing.T) {
 		t.Error("no DELETE was sent")
 	}
 }
+
+func TestEditFindsAMergedEntry(t *testing.T) {
+	// The 11:00 entry, made identical to the one before it, comes back merged
+	// into one entry from 09:00.
+	session, _ := newFake(t, map[string]string{
+		dayRoute:                         theDay,
+		"PUT /accounts/42/timeentries/2": `[{"id":7,"startTime":"2026-11-24T09:00:00","endTime":"2026-11-24T12:00:00","note":"review"},` + runJSON + `]`,
+	})
+	edited, err := session.Edit(context.Background(), day(), 2, Change{Note: ptr("review"), Start: ptr("10:00"), Overwrite: true})
+	if err != nil || edited.ID != 7 {
+		t.Errorf("edited = %+v, err = %v", edited, err)
+	}
+}

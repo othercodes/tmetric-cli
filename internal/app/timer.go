@@ -128,14 +128,26 @@ func (s *Session) Stop(ctx context.Context) (*Stopped, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The API stores the stopped entry under a new ID, so it is found by its
-	// start, which the API already cut to the minute when the timer started.
-	for i := range entries {
-		if entries[i].EndTime != nil && entries[i].StartTime.String() == running.StartTime.String() {
-			return &Stopped{Entry: &entries[i]}, nil
-		}
+	// The API stores the stopped entry under a new ID, and may merge it with
+	// the entry before it, so it is found as the one holding its start.
+	if found := holding(entries, running.StartTime); found != nil {
+		return &Stopped{Entry: found}, nil
 	}
 	return &Stopped{Entry: running, Dropped: true}, nil
+}
+
+// holding is the entry that holds the time at, or nil. TMetric merges
+// contiguous entries with the same description, project and task, so an
+// entry can come back starting earlier than it was sent.
+func holding(entries []tmetric.TimeEntry, at tmetric.LocalTime) *tmetric.TimeEntry {
+	t := at.String()
+	for i := range entries {
+		e := &entries[i]
+		if e.StartTime.String() <= t && (e.EndTime == nil || t < e.EndTime.String()) {
+			return e
+		}
+	}
+	return nil
 }
 
 func (s *Session) findProject(ctx context.Context, ref string) (*tmetric.Project, error) {
