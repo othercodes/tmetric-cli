@@ -126,9 +126,40 @@ func newTimerStartCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return recentNotes(cmd, flags, args)
+	}
 	cmd.Flags().StringVarP(&opts.Project, "project", "p", "", "project ID or exact name")
 	cmd.Flags().StringVarP(&opts.Task, "task", "t", "", "task ID or exact name, within --project")
 	return cmd
+}
+
+// recentNotes completes the description of `timer start` with what the user
+// worked on lately, each with its project as a hint. A failed call completes
+// nothing rather than printing an error into the shell.
+func recentNotes(cmd *cobra.Command, flags *rootFlags, args []string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	session, err := newSession(cmd.Context(), flags)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	recent, err := session.Recent(cmd.Context())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	seen := map[string]bool{}
+	var notes []string
+	for _, r := range recent {
+		if r.Note == "" || seen[r.Note] {
+			continue
+		}
+		seen[r.Note] = true
+		hint := output.Project(&tmetric.TimeEntry{Project: r.Project})
+		notes = append(notes, r.Note+"\t"+hint)
+	}
+	return notes, cobra.ShellCompDirectiveNoFileComp
 }
 
 func newTimerStopCmd(flags *rootFlags) *cobra.Command {

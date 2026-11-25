@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -58,6 +59,16 @@ func (s *Session) Continue(ctx context.Context, entry *tmetric.TimeEntry) (start
 		next.Task = &task
 	}
 	return s.begin(ctx, next)
+}
+
+// Recent is what the user worked on lately, the pinned ones first.
+func (s *Session) Recent(ctx context.Context) ([]tmetric.RecentEntry, error) {
+	recent, err := s.Client.RecentEntries(ctx, s.accountID())
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(recent, func(i, j int) bool { return recent[i].IsPinned && !recent[j].IsPinned })
+	return recent, nil
 }
 
 // begin creates the open entry and finds it in the answer, after noting the

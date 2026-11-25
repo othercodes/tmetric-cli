@@ -117,3 +117,17 @@ func TestTimerErrors(t *testing.T) {
 		expect(t, []string{"timer", sub}, 1, nil, []string{"not signed in"})
 	}
 }
+
+func TestStartCompletesRecentDescriptions(t *testing.T) {
+	recent := "GET /accounts/42/timeentries/recent"
+	timerAPI(t, map[string]string{recent: `[{"note":"review","project":{"id":5,"name":"CLI"}},
+		{"note":"review","project":{"id":6,"name":"Docs"}},{"note":""},{"note":"bugs"}]`})
+	// Unique, non-empty descriptions with their project as a hint; no files.
+	expect(t, []string{"__complete", "timer", "start", ""}, 0, []string{"review\tCLI\nbugs\t-\n:4\n"}, nil)
+	expect(t, []string{"__complete", "timer", "start", "review", ""}, 0, []string{":4\n"}, nil)
+
+	timerAPI(t, map[string]string{recent: "HTTP 500"})
+	expect(t, []string{"__complete", "timer", "start", ""}, 0, []string{":4\n"}, nil)
+	t.Setenv(tokenEnv, "")
+	expect(t, []string{"__complete", "timer", "start", ""}, 0, []string{":4\n"}, nil)
+}

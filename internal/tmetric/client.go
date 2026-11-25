@@ -180,6 +180,13 @@ func (c *Client) UpdateEntry(ctx context.Context, accountID int64, entry TimeEnt
 	return entries, err
 }
 
+// RecentEntries returns what the user worked on lately, without times.
+func (c *Client) RecentEntries(ctx context.Context, accountID int64) ([]RecentEntry, error) {
+	var recent []RecentEntry
+	_, err := c.do(ctx, http.MethodGet, accountPath(accountID, "/timeentries/recent"), nil, nil, &recent)
+	return recent, err
+}
+
 // DeleteEntry removes a time entry.
 func (c *Client) DeleteEntry(ctx context.Context, accountID, entryID int64) error {
 	_, err := c.do(ctx, http.MethodDelete, accountPath(accountID, "/timeentries/"+strconv.FormatInt(entryID, 10)), nil, nil, nil)

@@ -28,6 +28,7 @@ const (
 	tasksRoute    = "GET /accounts/42/tasks?ProjectList=6"
 	createRoute   = "POST /accounts/42/timeentries"
 	updateRoute   = "PUT /accounts/42/timeentries/1"
+	recentRoute   = "GET /accounts/42/timeentries/recent"
 	runningEntry  = `{"id":1,"startTime":"2026-11-24T13:00:00","endTime":null,"note":"standup","project":{"id":5,"name":"CLI"}}`
 	doneEntry     = `{"id":3,"startTime":"2026-11-24T09:00:00","endTime":"2026-11-24T10:00:00","note":"review","project":{"id":5,"name":"CLI"},"task":{"id":9,"name":"Tests"}}`
 	mondayEntry   = `{"id":4,"startTime":"2026-11-23T09:00:00","endTime":"2026-11-23T11:00:00","note":"bugs"}`
@@ -43,6 +44,7 @@ func routes() map[string]string {
 		todayRoute:    `[` + doneEntry + `,` + runningEntry + `]`,
 		weekRoute:     `[` + mondayEntry + `,` + doneEntry + `,` + runningEntry + `]`,
 		projectsRoute: projectsJSON,
+		recentRoute:   "[]",
 	}
 }
 

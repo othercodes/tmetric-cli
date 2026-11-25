@@ -26,6 +26,7 @@ var (
 	keyEdit     = bind("Edit", "enter", "enter", "e")
 	keyDelete   = bind("Delete", "d", "d")
 	keySave     = bind("Save", "enter", "enter")
+	keyUse      = bind("Use", "enter", "enter")
 	keyOpenDay  = bind("Open day", "enter", "enter")
 	keyStart    = bind("Start", "enter", "enter")
 	keyFilter   = bind("Filter", "/", "/")
@@ -57,6 +58,8 @@ func (m model) viewKeys() []key.Binding {
 	switch {
 	case m.overlay == formOverlay && m.form.editing != nil:
 		return []key.Binding{keySave, keyNext, keyMove, keyBack}
+	case m.overlay == formOverlay && m.form.suggest >= 0:
+		return []key.Binding{keyUse, keyMove, keyNext, keyBack}
 	case m.overlay == formOverlay:
 		return []key.Binding{keyStart, keyNext, keyMove, keyBack}
 	case m.overlay == helpOverlay:

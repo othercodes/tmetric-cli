@@ -43,6 +43,16 @@ type TimeEntry struct {
 	Tags []json.RawMessage `json:"tags,omitempty"`
 }
 
+// RecentEntry is something the user worked on lately: what, not when.
+type RecentEntry struct {
+	Note    string            `json:"note,omitempty"`
+	Project *Project          `json:"project,omitempty"`
+	Task    *Task             `json:"task,omitempty"`
+	Tags    []json.RawMessage `json:"tags,omitempty"`
+	// IsPinned marks the ones pinned in TMetric to stay on the list.
+	IsPinned bool `json:"isPinned,omitempty"`
+}
+
 // Project is a project an entry can be tracked on.
 type Project struct {
 	ID     int64     `json:"id"`

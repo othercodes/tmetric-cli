@@ -278,3 +278,24 @@ func TestContinueWithoutProject(t *testing.T) {
 		t.Errorf("body = %s", got)
 	}
 }
+
+func TestRecentPinnedFirst(t *testing.T) {
+	session, _ := newFake(t, map[string]string{
+		"GET /accounts/42/timeentries/recent": `[{"note":"a"},{"note":"b","isPinned":true},{"note":"c"},{"note":"d","isPinned":true}]`,
+	})
+	recent, err := session.Recent(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notes []string
+	for _, r := range recent {
+		notes = append(notes, r.Note)
+	}
+	if got := strings.Join(notes, ","); got != "b,d,a,c" {
+		t.Errorf("order = %s", got)
+	}
+	session, _ = newFake(t, map[string]string{"GET /accounts/42/timeentries/recent": "HTTP 500"})
+	if _, err := session.Recent(context.Background()); err == nil {
+		t.Error("want an error")
+	}
+}
