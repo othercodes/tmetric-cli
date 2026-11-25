@@ -62,6 +62,7 @@ a pipe, and --json where structured output is useful.`,
 		newTodayCmd(flags),
 		newWeekCmd(flags),
 		newProjectsCmd(flags),
+		newEntriesCmd(flags),
 		newUICmd(flags),
 	)
 	return root
@@ -88,7 +89,8 @@ func exitCode(err error) int {
 	fmt.Fprintln(os.Stderr, styler.Red("error:")+" "+renderError(err))
 	var usageErr *usageError
 	var appUsageErr *app.UsageError
-	if errors.As(err, &usageErr) || errors.As(err, &appUsageErr) {
+	var overlapErr *app.OverlapError
+	if errors.As(err, &usageErr) || errors.As(err, &appUsageErr) || errors.As(err, &overlapErr) {
 		return 2
 	}
 	return 1

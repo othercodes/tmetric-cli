@@ -288,3 +288,13 @@ func TestDoWithoutOut(t *testing.T) {
 		t.Errorf("found = %v, err = %v", found, err)
 	}
 }
+
+func TestDeleteEntry(t *testing.T) {
+	c, seen := fakeAPI(t, 200, ``)
+	if err := c.DeleteEntry(context.Background(), 42, 10); err != nil {
+		t.Fatal(err)
+	}
+	if seen.method != "DELETE" || seen.path != "/api/v3/accounts/42/timeentries/10" {
+		t.Errorf("request = %s %s", seen.method, seen.path)
+	}
+}

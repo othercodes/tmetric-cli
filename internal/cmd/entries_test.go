@@ -18,18 +18,18 @@ func TestToday(t *testing.T) {
 	timerAPI(t, map[string]string{entriesRoute: twoEntries})
 	// In a pipe: tab-separated rows, the total on stderr.
 	expect(t, []string{"today"}, 0,
-		[]string{"09:00\t10:30\t1h30m\tCLI\tTests\treview\n", "11:00\trunning\t"},
+		[]string{"1\t09:00\t10:30\t1h30m\tCLI\tTests\treview\n", "2\t11:00\trunning\t"},
 		[]string{"total "})
 	expect(t, []string{"today", "--format", "csv"}, 0,
-		[]string{"START,END,DURATION,PROJECT,TASK,DESCRIPTION\n09:00,10:30,1h30m,CLI,Tests,review\n"}, []string{"total "})
+		[]string{"ID,START,END,DURATION,PROJECT,TASK,DESCRIPTION\n1,09:00,10:30,1h30m,CLI,Tests,review\n"}, []string{"total "})
 	expect(t, []string{"today", "--json"}, 0, []string{`"total_seconds"`, `"note": "review"`, `"from": "`}, nil)
 	expect(t, []string{"today", "--format", "xml"}, 2, nil, []string{`unknown --format "xml"`})
 }
 
 func TestWeekHasADateColumn(t *testing.T) {
 	timerAPI(t, map[string]string{entriesRoute: twoEntries})
-	expect(t, []string{"week"}, 0, []string{"Mon 06\t09:00\t10:30\t1h30m\tCLI\tTests\treview\n"}, nil)
-	expect(t, []string{"week", "--format", "csv"}, 0, []string{"DATE,START,END"}, nil)
+	expect(t, []string{"week"}, 0, []string{"Mon 06\t1\t09:00\t10:30\t1h30m\tCLI\tTests\treview\n"}, nil)
+	expect(t, []string{"week", "--format", "csv"}, 0, []string{"DATE,ID,START,END"}, nil)
 }
 
 func TestReportWithoutEntries(t *testing.T) {

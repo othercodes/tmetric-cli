@@ -180,6 +180,12 @@ func (c *Client) UpdateEntry(ctx context.Context, accountID int64, entry TimeEnt
 	return entries, err
 }
 
+// DeleteEntry removes a time entry.
+func (c *Client) DeleteEntry(ctx context.Context, accountID, entryID int64) error {
+	_, err := c.do(ctx, http.MethodDelete, accountPath(accountID, "/timeentries/"+strconv.FormatInt(entryID, 10)), nil, nil, nil)
+	return err
+}
+
 // Projects returns the projects the user can track time on.
 func (c *Client) Projects(ctx context.Context, accountID int64) ([]Project, error) {
 	var projects []Project

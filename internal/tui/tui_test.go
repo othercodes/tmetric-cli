@@ -243,9 +243,9 @@ func TestWeekIgnoresEntriesOutsideIt(t *testing.T) {
 func TestContinue(t *testing.T) {
 	r := routes()
 	r[createRoute] = `[{"id":8,"startTime":"2026-11-24T14:30:00","endTime":null,"note":"review","project":{"id":5,"name":"CLI"}}]`
-	m := press(loaded(t, r), "enter")
+	m := press(loaded(t, r), "enter", "esc")
 	if bodies[createRoute] != "" {
-		t.Fatal("enter on an entry must not change data")
+		t.Fatal("opening an entry and closing it must not change data")
 	}
 	m = press(m, "s") // the 09:00 "review" entry, while "standup" runs
 	if got := m.footer(); got != `Stop "standup" · CLI (1h30m) and start "review" · CLI / Tests? y/N` {

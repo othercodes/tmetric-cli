@@ -6,6 +6,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -92,6 +93,8 @@ type (
 	acted struct {
 		notice string
 		err    error
+		// retry, on an edit that overlaps other entries, overwrites them.
+		retry tea.Cmd
 	}
 	tick struct{}
 )
@@ -263,8 +266,21 @@ func (m model) onTick() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// onActed reports a finished start or stop and reloads what it changed.
+// onActed reports a finished action and reloads what it changed. An edit
+// that would overwrite other entries asks before it goes ahead.
 func (m model) onActed(msg acted) (tea.Model, tea.Cmd) {
+	var overlap *app.OverlapError
+	if errors.As(msg.err, &overlap) && msg.retry != nil {
+		names := make([]string, len(overlap.Entries))
+		for i := range overlap.Entries {
+			names[i] = output.Describe(&overlap.Entries[i])
+		}
+		m.confirm = &confirmation{
+			question: fmt.Sprintf("This overwrites %s; TMetric cuts or removes them. Save anyway?", strings.Join(names, ", ")),
+			action:   msg.retry,
+		}
+		return m, nil
+	}
 	if msg.err != nil {
 		return m.fail(msg.err), m.reload()
 	}
@@ -381,13 +397,25 @@ func (m model) updateEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		next, cmd := m.goTo(day, m.week)
 		return next.(model).layout(), cmd
 	case key.Matches(msg, keyContinue) && m.tab == dayTab:
-		if m.dayReport == nil || len(m.dayReport.Entries) == 0 {
+		entry := m.selectedEntry()
+		if entry == nil {
 			return m, nil
 		}
-		entry := m.dayReport.Entries[m.dayTable.Cursor()]
-		return m.guard(m.continueEntry(&entry), output.Describe(&entry))
-	case key.Matches(msg, keyOpenDay):
-		// enter on an entry is kept for opening it (#7); it never changes data.
+		return m.guard(m.continueEntry(entry), output.Describe(entry))
+	case key.Matches(msg, keyEdit):
+		if entry := m.selectedEntry(); entry != nil {
+			return m.openEdit(*entry)
+		}
+		return m, nil
+	case key.Matches(msg, keyDelete):
+		entry := m.selectedEntry()
+		if entry == nil {
+			return m, nil
+		}
+		m.confirm = &confirmation{
+			question: "Delete " + output.Describe(entry) + " " + span(m.session.Location, entry) + "?",
+			action:   m.deleteEntry(*entry),
+		}
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -397,6 +425,26 @@ func (m model) updateEntries(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.dayTable, cmd = m.dayTable.Update(msg)
 	}
 	return m, cmd
+}
+
+// selectedEntry is the entry under the cursor of the Day tab, nil when the
+// day has none or another tab shows.
+func (m model) selectedEntry() *tmetric.TimeEntry {
+	entries := m.dayEntries()
+	if m.tab != dayTab || len(entries) == 0 {
+		return nil
+	}
+	entry := entries[m.dayTable.Cursor()]
+	return &entry
+}
+
+// span is an entry's "09:00–10:30", or "09:00–now" while it runs.
+func span(loc *time.Location, entry *tmetric.TimeEntry) string {
+	end := "now"
+	if entry.EndTime != nil {
+		end = entry.EndTime.In(loc).Format("15:04")
+	}
+	return entry.StartTime.In(loc).Format("15:04") + "–" + end
 }
 
 // goTo shows day in the Day tab and the week starting on week, loading what

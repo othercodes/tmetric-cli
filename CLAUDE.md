@@ -64,3 +64,6 @@ API facts that shape the code:
 - `--project` and `--task` take an ID or a name. A name resolves against the API; zero or many matches is a usage error.
   Never send `task:{name}`: TMetric creates the task when it does not exist.
 - `week` starts on the account's `firstWeekDay`, not always Monday.
+- The API cannot fetch an entry by ID alone, so `entries edit|delete <id>` look it up on `--date` (today by default).
+- An edit that would cover other entries is refused (TMetric would cut or remove them); the TUI asks before it overwrites.
+- Anything that stops or deletes tracked time asks first: `y/N` in the TUI footer, a prompt or `--yes` in the CLI.
