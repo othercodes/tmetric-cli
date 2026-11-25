@@ -7,14 +7,14 @@ Module: `github.com/othercodes/tmetric-cli` (go 1.26).
 
 - Code, comments, commits, issues and PRs in English.
 - Verify before you assert. Test against the real API, not only against fakes.
-- Write tests for non-trivial logic: parsing, output, HTTP client against `httptest`. CI gates coverage at 100% (`main.go` excluded).
+- Write tests for non-trivial logic: parsing, output, HTTP client against `httptest`. CI gates coverage at 100% (`cmd/tmetric/main.go` excluded).
 - Never commit or push unless the user asks. Before a commit, show the message first.
 - Commits: Conventional Commits, lowercase, one commit per topic.
 - One GitHub issue = one branch (`<type>/<issue>-<slug>`) = one PR, squash-merged into `master`.
 
 ## Structure
 
-- `main.go` at the root, everything else in `internal/` (the official Go layout for a single command).
+- `cmd/tmetric/main.go`, so `go install …/cmd/tmetric@latest` names the binary `tmetric`; everything else in `internal/`.
 - `internal/cmd`: Cobra commands. `root.go` maps errors to exit codes: 0 ok, 1 runtime/API, 2 usage (`usagef`).
 - `internal/app`: what the CLI and the TUI do, free of cobra and rendering.
 - `internal/tmetric`: our own small HTTP client for the TMetric API, with only the calls we use.
