@@ -23,6 +23,9 @@ var (
 	keyWeek     = bind("Week", "←/→", "left", "right", "h", "l")
 	keyToday    = bind("Today", "t", "t")
 	keyContinue = bind("Continue", "s", "s")
+	keyEdit     = bind("Edit", "enter", "enter", "e")
+	keyDelete   = bind("Delete", "d", "d")
+	keySave     = bind("Save", "enter", "enter")
 	keyOpenDay  = bind("Open day", "enter", "enter")
 	keyStart    = bind("Start", "enter", "enter")
 	keyFilter   = bind("Filter", "/", "/")
@@ -52,6 +55,8 @@ func (m model) globalKeys() []key.Binding {
 // viewKeys are the keys of what is on screen, most useful first.
 func (m model) viewKeys() []key.Binding {
 	switch {
+	case m.overlay == formOverlay && m.form.editing != nil:
+		return []key.Binding{keySave, keyNext, keyMove, keyBack}
 	case m.overlay == formOverlay:
 		return []key.Binding{keyStart, keyNext, keyMove, keyBack}
 	case m.overlay == helpOverlay:
@@ -67,6 +72,6 @@ func (m model) viewKeys() []key.Binding {
 	case m.tab == weekTab:
 		return []key.Binding{keyMove, keyWeek, keyOpenDay, keyToday, keyTabs}
 	default:
-		return []key.Binding{keyMove, keyDay, keyContinue, keyToday, keyTabs}
+		return []key.Binding{keyMove, keyDay, keyEdit, keyContinue, keyDelete, keyToday, keyTabs}
 	}
 }

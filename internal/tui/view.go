@@ -326,9 +326,23 @@ func (m model) formView() string {
 		lines = append(lines, label(taskField, "Task"))
 		lines = append(lines, pickList(names, f.taskCursor, "")...)
 	default:
-		lines = append(lines, label(taskField, "Task")+dim.Render("optional"))
+		lines = append(lines, label(taskField, "Task")+dim.Render(taskHint(f)))
 	}
-	return box(accentFg.Render("New timer"), strings.Join(lines, "\n"), 60, len(lines)+2, true)
+	title := "New timer"
+	if f.editing != nil {
+		title = "Edit entry"
+		lines = append(lines, label(startField, "Start")+f.start.View(), label(endField, "End")+f.end.View())
+	}
+	return box(accentFg.Render(title), strings.Join(lines, "\n"), 60, len(lines)+2, true)
+}
+
+// taskHint stands for the task list until it opens: the entry's own task when
+// editing, otherwise a reminder that a task is optional.
+func taskHint(f form) string {
+	if f.editing != nil && f.editing.Task != nil && f.editing.Task.Name != "" && !f.taskTouched {
+		return f.editing.Task.Name
+	}
+	return "optional"
 }
 
 // pickList shows up to listRows names around the cursor, the highlighted one
