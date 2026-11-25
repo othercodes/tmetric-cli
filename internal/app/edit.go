@@ -98,6 +98,15 @@ func (s *Session) apply(ctx context.Context, entry *tmetric.TimeEntry, change Ch
 	if change.Note != nil {
 		entry.Note = *change.Note
 	}
+	if err := s.applyProjectTask(ctx, entry, change); err != nil {
+		return err
+	}
+	return s.applyTimes(entry, change)
+}
+
+// applyProjectTask resolves a new project and task. A new project drops the
+// old task; an empty task removes it.
+func (s *Session) applyProjectTask(ctx context.Context, entry *tmetric.TimeEntry, change Change) error {
 	if change.Project != nil {
 		project, err := s.findProject(ctx, *change.Project)
 		if err != nil {
@@ -109,18 +118,25 @@ func (s *Session) apply(ctx context.Context, entry *tmetric.TimeEntry, change Ch
 		entry.Project = project
 	}
 	switch {
-	case change.Task != nil && *change.Task == "":
+	case change.Task == nil:
+		return nil
+	case *change.Task == "":
 		entry.Task = nil
-	case change.Task != nil:
-		if entry.Project == nil {
-			return usagef("--task needs a project: the entry has none, pass --project too")
-		}
-		task, err := s.findTask(ctx, entry.Project.ID, *change.Task)
-		if err != nil {
-			return err
-		}
-		entry.Task = task
+		return nil
+	case entry.Project == nil:
+		return usagef("--task needs a project: the entry has none, pass --project too")
 	}
+	task, err := s.findTask(ctx, entry.Project.ID, *change.Task)
+	if err != nil {
+		return err
+	}
+	entry.Task = task
+	return nil
+}
+
+// applyTimes sets a new start and end on the entry's day, and checks that the
+// entry still lasts.
+func (s *Session) applyTimes(entry *tmetric.TimeEntry, change Change) error {
 	day := entry.StartTime.In(s.Location)
 	if change.Start != nil {
 		start, err := at(day, *change.Start)
