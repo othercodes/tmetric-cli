@@ -57,6 +57,7 @@ API facts that shape the code:
 - The account is `activeAccountId` from `/user`. There is no separate accounts endpoint.
 - `userId` is optional on every route and defaults to the token owner, so the client never sends it.
 - Verified on a real account (2026-11-24): `endDate` is inclusive; a running timer comes back from `/latest` with `endTime: null`; an entry with no task has no `task` key.
+- `GET timeentries/recent` (verified 2026-11-25): recent note/project/task combinations, no times, `isPinned` for pinned ones.
 - Not verified yet: `/latest` on an account with no entries (the client accepts null, an empty body and 204).
 
 ## Product decisions

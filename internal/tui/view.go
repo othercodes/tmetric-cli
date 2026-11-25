@@ -302,10 +302,15 @@ func (m model) formView() string {
 		}
 		return style.Render(fmt.Sprintf("%-13s", text))
 	}
-	lines := []string{
-		label(descField, "Description") + f.description.View(),
-		label(projectField, "Project") + f.project.View(),
+	lines := []string{label(descField, "Description") + f.description.View()}
+	if found := f.suggestions(); len(found) > 0 {
+		names := make([]string, len(found))
+		for i, r := range found {
+			names[i] = output.Describe(&tmetric.TimeEntry{Note: r.Note, Project: r.Project, Task: r.Task})
+		}
+		lines = append(lines, pickList(names, f.suggest, "")...)
 	}
+	lines = append(lines, label(projectField, "Project")+f.project.View())
 	if strings.TrimSpace(f.project.Value()) != "" {
 		found := f.matches()
 		names := make([]string, len(found))
@@ -339,8 +344,15 @@ func (m model) formView() string {
 // taskHint stands for the task list until it opens: the entry's own task when
 // editing, otherwise a reminder that a task is optional.
 func taskHint(f form) string {
-	if f.editing != nil && f.editing.Task != nil && f.editing.Task.Name != "" && !f.taskTouched {
-		return f.editing.Task.Name
+	task := (*tmetric.Task)(nil)
+	switch {
+	case f.editing != nil:
+		task = f.editing.Task
+	case f.unchanged():
+		task = f.used.Task
+	}
+	if task != nil && task.Name != "" && !f.taskTouched {
+		return task.Name
 	}
 	return "optional"
 }

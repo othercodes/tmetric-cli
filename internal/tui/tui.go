@@ -84,6 +84,10 @@ type (
 		projects []tmetric.Project
 		err      error
 	}
+	recentLoaded struct {
+		recent []tmetric.RecentEntry
+		err    error
+	}
 	tasksLoaded struct {
 		projectID int64
 		tasks     []tmetric.Task
@@ -188,6 +192,11 @@ func (m model) loadProjects() tea.Msg {
 	return projectsLoaded{projects, err}
 }
 
+func (m model) loadRecent() tea.Msg {
+	recent, err := m.session.Recent(m.ctx)
+	return recentLoaded{recent, err}
+}
+
 func (m model) loadTasks(projectID int64) tea.Cmd {
 	return func() tea.Msg {
 		tasks, err := m.session.OpenTasks(m.ctx, projectID)
@@ -228,6 +237,7 @@ func (r dayLoaded) failure() error      { return r.err }
 func (r weekLoaded) failure() error     { return r.err }
 func (r projectsLoaded) failure() error { return r.err }
 func (r tasksLoaded) failure() error    { return r.err }
+func (r recentLoaded) failure() error   { return r.err }
 
 // apply stores a successful answer of the API.
 func (m model) apply(msg tea.Msg) model {
@@ -247,6 +257,8 @@ func (m model) apply(msg tea.Msg) model {
 		m.projects = msg.projects
 	case tasksLoaded:
 		m.form = m.form.withTasks(msg.projectID, msg.tasks)
+	case recentLoaded:
+		m.form.recent = msg.recent
 	}
 	return m.fill()
 }

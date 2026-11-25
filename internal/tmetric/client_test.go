@@ -298,3 +298,17 @@ func TestDeleteEntry(t *testing.T) {
 		t.Errorf("request = %s %s", seen.method, seen.path)
 	}
 }
+
+func TestRecentEntries(t *testing.T) {
+	c, seen := fakeAPI(t, 200, `[{"note":"review","project":{"id":5,"name":"CLI"},"task":{"id":9,"name":"Tests"},"isPinned":true}]`)
+	recent, err := c.RecentEntries(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen.path != "/api/v3/accounts/42/timeentries/recent" {
+		t.Errorf("path = %s", seen.path)
+	}
+	if len(recent) != 1 || recent[0].Note != "review" || !recent[0].IsPinned || *recent[0].Task.ID != 9 {
+		t.Errorf("recent = %+v", recent)
+	}
+}

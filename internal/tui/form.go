@@ -39,6 +39,13 @@ type form struct {
 	taskCursor  int  // 0 is "no task"
 	taskTouched bool // the user moved in the task list
 
+	// recent feeds the description suggestions of a new timer; suggest is
+	// the highlighted one, -1 while typing. used is the suggestion that
+	// filled the form, until the form drifts from it.
+	recent  []tmetric.RecentEntry
+	suggest int
+	used    *tmetric.RecentEntry
+
 	// editing is the entry as it was, nil for a new timer.
 	editing    *tmetric.TimeEntry
 	day        time.Time
@@ -65,6 +72,7 @@ func newForm(projects []tmetric.Project, chosen *tmetric.Project) form {
 		start:       newInput("HH:MM"),
 		end:         newInput("HH:MM, empty while it runs"),
 		projects:    projects,
+		suggest:     -1,
 	}
 	if chosen != nil {
 		f.project.SetValue(chosen.Name)
@@ -88,7 +96,50 @@ func (m model) editForm(entry tmetric.TimeEntry, day time.Time) form {
 func (m model) openForm(chosen *tmetric.Project) (tea.Model, tea.Cmd) {
 	m.overlay = formOverlay
 	m.form = newForm(m.projects, chosen)
-	return m, m.form.description.Focus()
+	return m, tea.Batch(m.form.description.Focus(), m.loadRecent)
+}
+
+// suggestions are the recent entries whose description holds what was typed,
+// as many as the list shows. They only help a new timer, on its description.
+func (f form) suggestions() []tmetric.RecentEntry {
+	if f.editing != nil || f.field != descField {
+		return nil
+	}
+	query := strings.ToLower(strings.TrimSpace(f.description.Value()))
+	var found []tmetric.RecentEntry
+	for _, r := range f.recent {
+		if strings.Contains(strings.ToLower(r.Note), query) && len(found) < listRows {
+			found = append(found, r)
+		}
+	}
+	return found
+}
+
+// use fills the form with a suggestion; it does not start anything.
+func (f form) use(r tmetric.RecentEntry) form {
+	f.description.SetValue(r.Note)
+	f.description.CursorEnd()
+	f.project.SetValue("")
+	f.cursor, f.tasks, f.tasksFor, f.taskCursor, f.taskTouched = 0, nil, 0, 0, false
+	if r.Project != nil {
+		f.project.SetValue(r.Project.Name)
+		f.cursor = f.indexOf(r.Project.ID)
+	}
+	f.used, f.suggest = &r, -1
+	return f
+}
+
+// unchanged reports whether the form still holds the suggestion it used, so
+// the timer can start from it whole, a link to an external task included.
+func (f form) unchanged() bool {
+	if f.used == nil || f.taskTouched || strings.TrimSpace(f.description.Value()) != f.used.Note {
+		return false
+	}
+	chosen := f.chosen()
+	if f.used.Project == nil {
+		return chosen == nil
+	}
+	return chosen != nil && chosen.ID == f.used.Project.ID
 }
 
 func (m model) openEdit(entry tmetric.TimeEntry) (tea.Model, tea.Cmd) {
@@ -175,10 +226,17 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keyBack):
 		m.overlay = noOverlay
 		return m, nil
+	case key.Matches(msg, keyStart) && f.suggest >= 0:
+		m.form = f.use(f.suggestions()[f.suggest])
+		return m, nil
 	case key.Matches(msg, keyStart):
 		m.overlay = noOverlay
 		if f.editing != nil {
 			return m, m.edit(f.day, f.editing, f.change())
+		}
+		if f.unchanged() {
+			entry := tmetric.TimeEntry{Note: f.used.Note, Project: f.used.Project, Task: f.used.Task}
+			return m.guard(m.continueEntry(&entry), output.Describe(&entry))
 		}
 		opts := f.options()
 		return m.guard(m.start(opts), `"`+opts.Note+`"`)
@@ -187,6 +245,9 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.Type == tea.KeyUp || msg.Type == tea.KeyDown:
 		delta := step(msg)
 		switch f.field {
+		case descField:
+			// -1 is back to typing.
+			f.suggest = max(-1, min(f.suggest+delta, len(f.suggestions())-1))
 		case projectField:
 			f.cursor = clamp(f.cursor+delta, len(f.matches()))
 		case taskField:
@@ -203,6 +264,7 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	before := f.project.Value()
 	var cmd tea.Cmd
 	*input, cmd = input.Update(msg)
+	f.suggest = -1
 	if f.project.Value() != before {
 		f.cursor, f.tasks, f.tasksFor = 0, nil, 0
 	}
