@@ -81,12 +81,12 @@ jobs:
 
       - name: Build and run the binary
         run: |
-          go build -o tmetric .
+          go build -o tmetric ./cmd/tmetric
           ./tmetric --version
 
-      - name: Drop main.go from coverage
+      - name: Drop cmd/tmetric/main.go from coverage
         # main.go only wires signals to os.Exit; sonar-project.properties excludes it too.
-        run: grep -v '^github.com/othercodes/tmetric-cli/main.go:' coverage.raw > coverage.out
+        run: grep -v '^github.com/othercodes/tmetric-cli/cmd/tmetric/main.go:' coverage.raw > coverage.out
 
       - name: Upload coverage data
         if: matrix.go-version == 'stable'

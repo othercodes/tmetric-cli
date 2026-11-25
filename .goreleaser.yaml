@@ -4,7 +4,7 @@ project_name: tmetric
 
 builds:
   - binary: tmetric
-    main: .
+    main: ./cmd/tmetric
     env:
       - CGO_ENABLED=0
     flags:
