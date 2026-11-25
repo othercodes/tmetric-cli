@@ -80,10 +80,8 @@ func (s *Session) Edit(ctx context.Context, day time.Time, id int64, change Chan
 	if err != nil {
 		return nil, err
 	}
-	for i := range entries {
-		if entries[i].StartTime.String() == entry.StartTime.String() {
-			return &entries[i], nil
-		}
+	if found := holding(entries, entry.StartTime); found != nil {
+		return found, nil
 	}
 	return nil, fmt.Errorf("the entry may have changed, but the API did not return it: check `tmetric today`")
 }

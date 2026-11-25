@@ -54,6 +54,7 @@ API facts that shape the code:
 - `PUT` replaces the whole entry: send every field back, not only `endTime`. It answers with an array like `POST`
   (not a single entry, whatever the spec says), and the entry comes back under a **new ID**: find it by `startTime`.
 - An entry shorter than a minute (start and end in the same minute) is dropped, not stored.
+- TMetric merges contiguous entries with the same description, project and task: an entry can come back starting earlier than it was sent. Find a stored or edited entry as the one that holds its start.
 - The account is `activeAccountId` from `/user`. There is no separate accounts endpoint.
 - `userId` is optional on every route and defaults to the token owner, so the client never sends it.
 - Verified on a real account (2026-11-24): `endDate` is inclusive; a running timer comes back from `/latest` with `endTime: null`; an entry with no task has no `task` key.

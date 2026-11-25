@@ -299,3 +299,16 @@ func TestRecentPinnedFirst(t *testing.T) {
 		t.Error("want an error")
 	}
 }
+
+func TestStopFindsAMergedEntry(t *testing.T) {
+	// TMetric merged the stopped entry with an identical one before it: it
+	// comes back starting at 12:00, holding the 13:00 start.
+	session, _ := newFake(t, map[string]string{
+		latest:                           running,
+		"PUT /accounts/42/timeentries/1": `[{"id":9,"startTime":"2026-11-24T12:00:00","endTime":"2026-11-24T14:30:00","note":"standup"}]`,
+	})
+	stopped, err := session.Stop(context.Background())
+	if err != nil || stopped.Dropped || stopped.Entry.ID != 9 {
+		t.Errorf("stopped = %+v, err = %v", stopped, err)
+	}
+}

@@ -91,12 +91,29 @@ func newTimerStatusCmd(flags *rootFlags) *cobra.Command {
 	}
 }
 
+// confirmStop asks before a command stops the running timer: TMetric closes it
+// on the spot and nothing undoes that. next names what starts instead.
+func confirmStop(ctx context.Context, session *app.Session, yes bool, next string) error {
+	running, err := session.Running(ctx)
+	if err != nil || running == nil {
+		return err
+	}
+	what := "stop " + output.Describe(running) + " (" + output.Duration(session.Elapsed(running)) + ")"
+	if next != "" {
+		what += " and start " + next
+	}
+	return confirm(yes, what)
+}
+
 func newTimerStartCmd(flags *rootFlags) *cobra.Command {
 	opts := app.StartOptions{}
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "start [description]",
 		Short: "Start a timer now, stopping the one that runs",
-		Long: `start starts a timer now. TMetric stops the timer that was running.
+		Long: `start starts a timer now. TMetric stops the timer that was running, so
+when one runs, start asks first; pass --yes to skip the question, which is
+required without a terminal.
 
 --project and --task take an ID or an exact name (case does not matter);
 "tmetric projects list" shows them. --task needs --project.`,
@@ -106,6 +123,9 @@ func newTimerStartCmd(flags *rootFlags) *cobra.Command {
 			opts.Note = strings.Join(args, " ")
 			session, err := newSession(cmd.Context(), flags)
 			if err != nil {
+				return err
+			}
+			if err := confirmStop(cmd.Context(), session, yes, `"`+opts.Note+`"`); err != nil {
 				return err
 			}
 			started, stopped, err := session.Start(cmd.Context(), opts)
@@ -129,6 +149,7 @@ func newTimerStartCmd(flags *rootFlags) *cobra.Command {
 	cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return recentNotes(cmd, flags, args)
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "stop the running timer without asking")
 	cmd.Flags().StringVarP(&opts.Project, "project", "p", "", "project ID or exact name")
 	cmd.Flags().StringVarP(&opts.Task, "task", "t", "", "task ID or exact name, within --project")
 	return cmd
@@ -163,13 +184,18 @@ func recentNotes(cmd *cobra.Command, flags *rootFlags, args []string) ([]string,
 }
 
 func newTimerStopCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+	cmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the running timer now",
+		Long:  "stop stops the running timer now. It asks first; pass --yes to skip the question, which is required without a terminal.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			session, err := newSession(cmd.Context(), flags)
 			if err != nil {
+				return err
+			}
+			if err := confirmStop(cmd.Context(), session, yes, ""); err != nil {
 				return err
 			}
 			stopped, err := session.Stop(cmd.Context())
@@ -192,4 +218,6 @@ func newTimerStopCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "stop without asking")
+	return cmd
 }
