@@ -180,8 +180,8 @@ func TestGroupsAndFocus(t *testing.T) {
 		t.Error("down in the sidebar should pick the next view")
 	}
 	m = press(m, "up", "up")
-	if m.view != projectsView {
-		t.Error("up should wrap around")
+	if m.view != reportsView {
+		t.Error("up should wrap around to the last view")
 	}
 	m = press(m, "t", "tab")
 	if m.focus != panelFocus {

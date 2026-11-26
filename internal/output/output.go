@@ -189,3 +189,24 @@ func Duration(d time.Duration) string {
 	minutes := int64(d / time.Minute)
 	return fmt.Sprintf("%dh%02dm", minutes/60, minutes%60)
 }
+
+// SignedDuration is Duration with a sign, for a difference: "+1h05m",
+// "-27h40m", "0h00m".
+func SignedDuration(d time.Duration) string {
+	switch {
+	case d < 0:
+		return "-" + Duration(-d)
+	case d >= time.Minute:
+		return "+" + Duration(d)
+	}
+	return Duration(d)
+}
+
+// Money is an amount with its currency ("1250.00 EUR"), or "-" when there is
+// none: amounts only come with access to financial information.
+func Money(amount *float64, currency string) string {
+	if amount == nil {
+		return "-"
+	}
+	return strings.TrimSpace(fmt.Sprintf("%.2f %s", *amount, currency))
+}

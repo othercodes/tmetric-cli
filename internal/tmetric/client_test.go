@@ -312,3 +312,41 @@ func TestRecentEntries(t *testing.T) {
 		t.Errorf("recent = %+v", recent)
 	}
 }
+
+func TestProjectReport(t *testing.T) {
+	c, seen := fakeAPI(t, 200, `[{"project":{"id":5,"name":"CLI"},"totalSeconds":3600,"billableSeconds":1800,
+		"billableAmount":50.5,"billableCurrency":"EUR","budget":{"total":10,"spent":2,"unit":"h"}},{"totalSeconds":600}]`)
+	loc := time.FixedZone("test", 3600)
+	report, err := c.ProjectReport(context.Background(), 42, 7,
+		time.Date(2026, 11, 23, 0, 0, 0, 0, loc), time.Date(2026, 11, 29, 0, 0, 0, 0, loc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen.path != "/api/v3/accounts/42/reports/projects" ||
+		seen.query != "endDate=2026-11-29&includeDone=true&startDate=2026-11-23&userId=7" {
+		t.Errorf("request = %s?%s", seen.path, seen.query)
+	}
+	if len(report) != 2 || *report[0].BillableAmount != 50.5 || report[0].Budget.Unit != "h" ||
+		report[1].Project != nil || report[1].BillableAmount != nil {
+		t.Errorf("report = %+v", report)
+	}
+}
+
+func TestBalance(t *testing.T) {
+	c, seen := fakeAPI(t, 200, `{"today":{"requiredSeconds":28800,"actualSeconds":14400,"actualSecondsRounded":14400},
+		"week":{"requiredSeconds":144000,"actualSeconds":57600},"month":{"requiredSeconds":403200,"actualSeconds":388800}}`)
+	balance, err := c.Balance(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen.path != "/api/v3/accounts/42/balance" || seen.query != "" {
+		t.Errorf("request = %s?%s", seen.path, seen.query)
+	}
+	if balance.Today.RequiredSeconds != 28800 || balance.Week.ActualSeconds != 57600 || balance.Month.RequiredSeconds != 403200 {
+		t.Errorf("balance = %+v", balance)
+	}
+	c, _ = fakeAPI(t, 500, ``)
+	if _, err := c.Balance(context.Background(), 42); err == nil {
+		t.Error("want an error")
+	}
+}

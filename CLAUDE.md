@@ -59,6 +59,8 @@ API facts that shape the code:
 - `userId` is optional on every route and defaults to the token owner, so the client never sends it.
 - Verified on a real account (2026-11-24): `endDate` is inclusive; a running timer comes back from `/latest` with `endTime: null`; an entry with no task has no `task` key.
 - `GET timeentries/recent` (verified 2026-11-25): recent note/project/task combinations, no times, `isPinned` for pinned ones.
+- `GET reports/projects` (verified 2026-11-25): per project `totalSeconds` and `billableSeconds`; amounts and costs only with access to financial information. Always send `startDate`/`endDate` (none means the projects' whole lifetime), `includeDone=true`, and `userId` as the user's real ID (none may mean the whole team).
+- `GET balance` (verified 2026-11-25): today, week and month with `requiredSeconds` and `actualSeconds`. A workspace with no work schedule requires 0 seconds everywhere.
 - Not verified yet: `/latest` on an account with no entries (the client accepts null, an empty body and 204).
 
 ## Product decisions

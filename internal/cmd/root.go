@@ -63,6 +63,7 @@ a pipe, and --json where structured output is useful.`,
 		newWeekCmd(flags),
 		newProjectsCmd(flags),
 		newEntriesCmd(flags),
+		newReportsCmd(flags),
 		newUICmd(flags),
 	)
 	return root
