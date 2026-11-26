@@ -79,8 +79,11 @@ func (m model) layout() model {
 		{Title: "ID", Width: 8}, {Title: "PROJECT", Width: rest * 3 / 5}, {Title: "CLIENT", Width: rest - rest*3/5},
 	})
 
-	tables := []*table.Model{&m.dayTable, &m.weekTable, &m.projectTable}
-	active := []bool{m.view == entriesView && m.tab == dayTab, m.view == entriesView && m.tab == weekTab, m.view == projectsView}
+	m.reportTable.SetColumns(reportColumns(inner))
+
+	tables := []*table.Model{&m.dayTable, &m.weekTable, &m.projectTable, &m.reportTable}
+	active := []bool{m.view == entriesView && m.tab == dayTab, m.view == entriesView && m.tab == weekTab, m.view == projectsView,
+		m.view == reportsView && m.reportTab == projectsReportTab}
 	for i, t := range tables {
 		t.SetWidth(inner)
 		t.SetHeight(rows)
@@ -114,9 +117,10 @@ func (m model) fill() model {
 		rows = append(rows, table.Row{id(p.ID), p.Name, client})
 	}
 	m.projectTable.SetRows(rows)
+	m.reportTable.SetRows(m.reportRows())
 	// An empty table leaves its cursor at -1; put it back on the first row,
 	// or enter would read row -1 once the rows come back.
-	for _, t := range []*table.Model{&m.dayTable, &m.weekTable, &m.projectTable} {
+	for _, t := range []*table.Model{&m.dayTable, &m.weekTable, &m.projectTable, &m.reportTable} {
 		if t.Cursor() < 0 {
 			t.SetCursor(0)
 		}
@@ -226,6 +230,8 @@ func (m model) panelView() string {
 	var title, caption, summary string
 	var body string
 	switch {
+	case m.view == reportsView:
+		title, caption, body, summary = m.reportsPanel()
 	case m.view == projectsView:
 		title = accentFg.Render("Projects")
 		caption = dim.Render("projects you can track time on")

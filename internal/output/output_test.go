@@ -221,3 +221,26 @@ func TestDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestSignedDuration(t *testing.T) {
+	for in, want := range map[time.Duration]string{
+		65 * time.Minute: "+1h05m", -(27*time.Hour + 40*time.Minute): "-27h40m", 30 * time.Second: "0h00m", 0: "0h00m",
+	} {
+		if got := SignedDuration(in); got != want {
+			t.Errorf("SignedDuration(%v) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestMoney(t *testing.T) {
+	amount := 1250.5
+	if got := Money(&amount, "EUR"); got != "1250.50 EUR" {
+		t.Errorf("Money = %q", got)
+	}
+	if got := Money(&amount, ""); got != "1250.50" {
+		t.Errorf("Money without currency = %q", got)
+	}
+	if got := Money(nil, "EUR"); got != "-" {
+		t.Errorf("Money(nil) = %q", got)
+	}
+}

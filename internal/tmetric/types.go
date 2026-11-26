@@ -53,6 +53,43 @@ type RecentEntry struct {
 	IsPinned bool `json:"isPinned,omitempty"`
 }
 
+// ProjectReport is the time tracked on one project over a range. Project is
+// nil for time tracked on no project. The amounts only come with access to
+// financial information, so they can be missing.
+type ProjectReport struct {
+	Project          *Project `json:"project"`
+	TotalSeconds     float64  `json:"totalSeconds"`
+	BillableSeconds  float64  `json:"billableSeconds"`
+	BillableAmount   *float64 `json:"billableAmount,omitempty"`
+	BillableCurrency string   `json:"billableCurrency,omitempty"`
+	CostAmount       *float64 `json:"costAmount,omitempty"`
+	CostCurrency     string   `json:"costCurrency,omitempty"`
+	Budget           *Budget  `json:"budget,omitempty"`
+}
+
+// Budget is a project's budget, in a currency or in hours ("h").
+type Budget struct {
+	Total float64 `json:"total"`
+	Spent float64 `json:"spent"`
+	Unit  string  `json:"unit"`
+}
+
+// Balance is the tracked time against what the work schedule requires,
+// today, this week and this month.
+type Balance struct {
+	Today TimeBalance `json:"today"`
+	Week  TimeBalance `json:"week"`
+	Month TimeBalance `json:"month"`
+}
+
+// TimeBalance is one period of a Balance. ActualSecondsRounded follows the
+// workspace's rounding, and equals ActualSeconds when it is off.
+type TimeBalance struct {
+	RequiredSeconds      int64 `json:"requiredSeconds"`
+	ActualSeconds        int64 `json:"actualSeconds"`
+	ActualSecondsRounded int64 `json:"actualSecondsRounded"`
+}
+
 // Project is a project an entry can be tracked on.
 type Project struct {
 	ID     int64     `json:"id"`

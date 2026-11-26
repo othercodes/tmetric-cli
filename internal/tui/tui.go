@@ -41,9 +41,10 @@ const (
 const (
 	entriesView = iota
 	projectsView
+	reportsView
 )
 
-var viewNames = []string{"Time entries", "Projects"}
+var viewNames = []string{"Time entries", "Projects", "Reports"}
 
 const (
 	dayTab = iota
@@ -127,6 +128,15 @@ type model struct {
 
 	dayTable, weekTable, projectTable table.Model
 
+	// The Reports view: its tab, the range of the project report (an index in
+	// app.Ranges) and the answers.
+	reportTab, reportRange int
+	report                 []tmetric.ProjectReport
+	reportFrom, reportTo   time.Time
+	reportReady            bool
+	reportTable            table.Model
+	balance                *tmetric.Balance
+
 	filtering bool
 	filter    textinput.Model
 
@@ -151,14 +161,14 @@ func newModel(ctx context.Context, session *app.Session) model {
 		ctx: ctx, session: session,
 		width: 100, height: 30,
 		day: today, week: session.WeekStart(today),
-		dayTable: newTable(), weekTable: newTable(), projectTable: newTable(),
+		dayTable: newTable(), weekTable: newTable(), projectTable: newTable(), reportTable: newTable(),
 		filter: filter,
 	}
 	return m.layout()
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.loadTimer, m.loadDay(m.day), m.loadWeek(m.week), m.loadProjects, tickEvery())
+	return tea.Batch(m.reload(), m.loadProjects, tickEvery())
 }
 
 // tickInterval is how often the clock redraws; tests shorten it.
@@ -204,9 +214,9 @@ func (m model) loadTasks(projectID int64) tea.Cmd {
 	}
 }
 
-// reload refreshes what a start or stop can change.
+// reload refreshes what a start, a stop or an edit can change.
 func (m model) reload() tea.Cmd {
-	return tea.Batch(m.loadTimer, m.loadDay(m.day), m.loadWeek(m.week))
+	return tea.Batch(m.loadTimer, m.loadDay(m.day), m.loadWeek(m.week), m.loadReport(m.reportRange), m.loadBalance)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -259,6 +269,10 @@ func (m model) apply(msg tea.Msg) model {
 		m.form = m.form.withTasks(msg.projectID, msg.tasks)
 	case recentLoaded:
 		m.form.recent = msg.recent
+	case reportLoaded:
+		m = m.applyReport(msg)
+	case balanceLoaded:
+		m.balance = msg.balance
 	}
 	return m.fill()
 }
@@ -383,8 +397,11 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.view == projectsView {
+	switch m.view {
+	case projectsView:
 		return m.updateProjects(msg)
+	case reportsView:
+		return m.updateReports(msg)
 	}
 	return m.updateEntries(msg)
 }

@@ -187,6 +187,31 @@ func (c *Client) RecentEntries(ctx context.Context, accountID int64) ([]RecentEn
 	return recent, err
 }
 
+// ProjectReport returns the time userID tracked on each project from the
+// day of from to the day of to. Without a user the API may answer for the
+// whole team, and without dates for the projects' whole lifetime, so both
+// are always sent; done projects count, so the total matches the entries.
+func (c *Client) ProjectReport(ctx context.Context, accountID, userID int64, from, to time.Time) ([]ProjectReport, error) {
+	query := url.Values{
+		"userId":      {strconv.FormatInt(userID, 10)},
+		"startDate":   {from.Format(time.DateOnly)},
+		"endDate":     {to.Format(time.DateOnly)},
+		"includeDone": {"true"},
+	}
+	var report []ProjectReport
+	_, err := c.do(ctx, http.MethodGet, accountPath(accountID, "/reports/projects"), query, nil, &report)
+	return report, err
+}
+
+// Balance returns the token owner's tracked time against the work schedule.
+func (c *Client) Balance(ctx context.Context, accountID int64) (*Balance, error) {
+	balance := &Balance{}
+	if _, err := c.do(ctx, http.MethodGet, accountPath(accountID, "/balance"), nil, nil, balance); err != nil {
+		return nil, err
+	}
+	return balance, nil
+}
+
 // DeleteEntry removes a time entry.
 func (c *Client) DeleteEntry(ctx context.Context, accountID, entryID int64) error {
 	_, err := c.do(ctx, http.MethodDelete, accountPath(accountID, "/timeentries/"+strconv.FormatInt(entryID, 10)), nil, nil, nil)

@@ -27,6 +27,7 @@ var (
 	keyDelete   = bind("Delete", "d", "d")
 	keySave     = bind("Save", "enter", "enter")
 	keyUse      = bind("Use", "enter", "enter")
+	keyRange    = bind("Range", "t", "t")
 	keyOpenDay  = bind("Open day", "enter", "enter")
 	keyStart    = bind("Start", "enter", "enter")
 	keyFilter   = bind("Filter", "/", "/")
@@ -72,6 +73,10 @@ func (m model) viewKeys() []key.Binding {
 		return []key.Binding{keyMove, keyFocus}
 	case m.view == projectsView:
 		return []key.Binding{keyMove, keyStart, keyFilter, keyFocus}
+	case m.view == reportsView && m.reportTab == balanceTab:
+		return []key.Binding{keyTabs, keyFocus}
+	case m.view == reportsView:
+		return []key.Binding{keyMove, keyRange, keyTabs, keyFocus}
 	case m.tab == weekTab:
 		return []key.Binding{keyMove, keyWeek, keyOpenDay, keyToday, keyTabs}
 	default:
