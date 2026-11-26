@@ -92,27 +92,10 @@ financial information. Totals of money are summed per currency.`,
 				})
 			}
 			header := []string{"PROJECT", "CLIENT", "TIME", "BILLABLE", "SHARE", "AMOUNT", "COST"}
-			rows := make([][]string, len(report))
-			for i, r := range report {
-				entry := &tmetric.TimeEntry{Project: r.Project}
-				client := "-"
-				if r.Project != nil && r.Project.Client != nil {
-					client = r.Project.Client.Name
-				}
-				name := output.Project(entry)
-				if r.Project == nil {
-					name = "(no project)"
-				}
-				rows[i] = []string{name, client, seconds(r.TotalSeconds), seconds(r.BillableSeconds), share(r.TotalSeconds, total),
-					output.Money(r.BillableAmount, r.BillableCurrency), output.Money(r.CostAmount, r.CostCurrency)}
-			}
-			if err := renderList(format, header, rows); err != nil {
+			if err := renderList(format, header, projectRows(report, total)); err != nil {
 				return err
 			}
-			summary := []string{"total " + seconds(total)}
-			summary = append(summary, sums("amount", report, func(r tmetric.ProjectReport) (*float64, string) { return r.BillableAmount, r.BillableCurrency })...)
-			summary = append(summary, sums("cost", report, func(r tmetric.ProjectReport) (*float64, string) { return r.CostAmount, r.CostCurrency })...)
-			printSummary(format, start.Format(time.DateOnly)+" to "+end.Format(time.DateOnly)+" · "+strings.Join(summary, " · "))
+			printSummary(format, start.Format(time.DateOnly)+" to "+end.Format(time.DateOnly)+" · "+projectTotals(report, total))
 			return nil
 		},
 	}
@@ -121,6 +104,32 @@ financial information. Totals of money are summed per currency.`,
 	cmd.Flags().StringVar(&to, "to", "", "last day, YYYY-MM-DD (with --from)")
 	addFormatFlag(cmd, &format)
 	return cmd
+}
+
+// projectRows lays the project report out as table rows.
+func projectRows(report []tmetric.ProjectReport, total float64) [][]string {
+	rows := make([][]string, len(report))
+	for i, r := range report {
+		name, client := "(no project)", "-"
+		if r.Project != nil {
+			name = r.Project.Name
+			if r.Project.Client != nil {
+				client = r.Project.Client.Name
+			}
+		}
+		rows[i] = []string{name, client, seconds(r.TotalSeconds), seconds(r.BillableSeconds), share(r.TotalSeconds, total),
+			output.Money(r.BillableAmount, r.BillableCurrency), output.Money(r.CostAmount, r.CostCurrency)}
+	}
+	return rows
+}
+
+// projectTotals is the totals line of the report: the time, then the money
+// per currency.
+func projectTotals(report []tmetric.ProjectReport, total float64) string {
+	parts := []string{"total " + seconds(total)}
+	parts = append(parts, sums("amount", report, func(r tmetric.ProjectReport) (*float64, string) { return r.BillableAmount, r.BillableCurrency })...)
+	parts = append(parts, sums("cost", report, func(r tmetric.ProjectReport) (*float64, string) { return r.CostAmount, r.CostCurrency })...)
+	return strings.Join(parts, " · ")
 }
 
 // printSummary puts a totals line after a list: on stdout under a table on a
