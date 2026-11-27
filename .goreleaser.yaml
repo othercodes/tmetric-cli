@@ -34,6 +34,26 @@ archives:
 checksum:
   name_template: checksums.txt
 
+homebrew_casks:
+  - name: tmetric
+    ids: [versioned]
+    repository:
+      owner: othercodes
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/othercodes/tmetric-cli
+    description: Unofficial CLI and TUI for TMetric time tracking
+    # Pre-releases (v1.2.3-rc.1) do not update the tap.
+    skip_upload: auto
+    # The binaries are not notarized; clear the quarantine attribute so
+    # Gatekeeper does not block them.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/tmetric"]
+          end
+
 release:
   # v1.2.3-rc.1 is published as a pre-release, like pyssertive does.
   prerelease: auto
