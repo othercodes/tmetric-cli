@@ -101,9 +101,9 @@ The running timer stays on top, ticking. Views sit on the left (`1`…`3`), thei
 
 | Key | Action |
 |---|---|
-| `n` | New timer: description (with recent suggestions), project filtered as you type, optional task |
+| `n` | New timer: description (with recent suggestions), project (recent ones first, filtered as you type), optional task |
 | `s` | Continue the selected entry: a new timer with its description, project and task |
-| `enter` / `e` | Edit the selected entry |
+| `enter` / `e` | Edit the selected entry, with the same suggestions once you change the description |
 | `d` | Delete the selected entry |
 | `x` | Stop the running timer |
 | `←` / `→`, `t` | Previous / next day or week, back to today |

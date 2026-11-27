@@ -268,7 +268,12 @@ func (m model) apply(msg tea.Msg) model {
 	case tasksLoaded:
 		m.form = m.form.withTasks(msg.projectID, msg.tasks)
 	case recentLoaded:
+		// The recent projects come first in the matches: keep the highlighted one.
+		chosen := m.form.chosen()
 		m.form.recent = msg.recent
+		if chosen != nil {
+			m.form.cursor = m.form.indexOf(chosen.ID)
+		}
 	case reportLoaded:
 		m = m.applyReport(msg)
 	case balanceLoaded:

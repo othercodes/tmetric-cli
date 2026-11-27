@@ -317,13 +317,10 @@ func (m model) formView() string {
 		lines = append(lines, pickList(names, f.suggest, "")...)
 	}
 	lines = append(lines, label(projectField, "Project")+f.project.View())
-	if strings.TrimSpace(f.project.Value()) != "" {
-		found := f.matches()
-		names := make([]string, len(found))
-		for i, p := range found {
-			names[i] = p.Name
-		}
-		lines = append(lines, pickList(names, f.cursor, "no project matches")...)
+	if found := f.projectSuggestions(); len(found) > 0 {
+		lines = append(lines, pickList(projectNames(found), f.suggest, "")...)
+	} else if strings.TrimSpace(f.project.Value()) != "" {
+		lines = append(lines, pickList(projectNames(f.matches()), f.cursor, "no project matches")...)
 	}
 	chosen := f.chosen()
 	switch {
@@ -347,15 +344,26 @@ func (m model) formView() string {
 	return box(accentFg.Render(title), strings.Join(lines, "\n"), 60, len(lines)+2, true)
 }
 
-// taskHint stands for the task list until it opens: the entry's own task when
-// editing, otherwise a reminder that a task is optional.
+func projectNames(projects []tmetric.Project) []string {
+	names := make([]string, len(projects))
+	for i, p := range projects {
+		names[i] = p.Name
+	}
+	return names
+}
+
+// taskHint stands for the task list until it opens: the task of the
+// suggestion the form used, the entry's own task when editing, otherwise a
+// reminder that a task is optional. An edit cannot set an external task.
 func taskHint(f form) string {
 	task := (*tmetric.Task)(nil)
 	switch {
-	case f.editing != nil:
-		task = f.editing.Task
+	case f.editing != nil && f.unchanged() && external(f.used.Task):
+		return keptTask(f) + " (" + f.used.Task.Name + " is external, not set)"
 	case f.unchanged():
 		task = f.used.Task
+	case f.editing != nil:
+		task = f.editing.Task
 	}
 	if task != nil && task.Name != "" && !f.taskTouched {
 		return task.Name
@@ -442,4 +450,14 @@ func (m model) footer() string {
 		parts = next
 	}
 	return strings.Join(append(parts, last), " | ")
+}
+
+// keptTask is the task an edit leaves on the entry: its own while the project
+// stays, none when the project changes.
+func keptTask(f form) string {
+	was, chosen := f.editing, f.chosen()
+	if was.Task == nil || was.Project == nil || chosen == nil || chosen.ID != was.Project.ID {
+		return "no task"
+	}
+	return was.Task.Name
 }
