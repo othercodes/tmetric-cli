@@ -10,7 +10,13 @@ Start and stop timers, review and fix your entries, and see where your week went
 
 ## Install
 
-With Go 1.26 or later:
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install othercodes/tap/tmetric
+```
+
+Or with Go 1.26 or later:
 
 ```sh
 go install github.com/othercodes/tmetric-cli/cmd/tmetric@latest
