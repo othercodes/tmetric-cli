@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -39,9 +40,10 @@ type form struct {
 	taskCursor  int  // 0 is "no task"
 	taskTouched bool // the user moved in the task list
 
-	// recent feeds the description suggestions of a new timer; suggest is
-	// the highlighted one, -1 while typing. used is the suggestion that
-	// filled the form, until the form drifts from it.
+	// recent feeds the suggestions: whole entries on the description, their
+	// projects on an empty project field. suggest is the highlighted one, -1
+	// while typing. used is the suggestion that filled the form, until the
+	// form drifts from it.
 	recent  []tmetric.RecentEntry
 	suggest int
 	used    *tmetric.RecentEntry
@@ -100,9 +102,10 @@ func (m model) openForm(chosen *tmetric.Project) (tea.Model, tea.Cmd) {
 }
 
 // suggestions are the recent entries whose description holds what was typed,
-// as many as the list shows. They only help a new timer, on its description.
+// as many as the list shows, on the description field. An edit shows them
+// once the description changes, or the first one would be the entry itself.
 func (f form) suggestions() []tmetric.RecentEntry {
-	if f.editing != nil || f.field != descField {
+	if f.field != descField || f.editing != nil && f.description.Value() == f.editing.Note {
 		return nil
 	}
 	query := strings.ToLower(strings.TrimSpace(f.description.Value()))
@@ -115,17 +118,64 @@ func (f form) suggestions() []tmetric.RecentEntry {
 	return found
 }
 
-// use fills the form with a suggestion; it does not start anything.
-func (f form) use(r tmetric.RecentEntry) form {
+// recentProjects are the projects of the recent entries that can still be
+// tracked, once each, in the order of the recent entries (pinned first).
+func (f form) recentProjects() []tmetric.Project {
+	var found []tmetric.Project
+	for _, r := range f.recent {
+		if r.Project == nil || slices.ContainsFunc(found, sameProject(r.Project.ID)) {
+			continue
+		}
+		if i := slices.IndexFunc(f.projects, sameProject(r.Project.ID)); i >= 0 {
+			found = append(found, f.projects[i])
+		}
+	}
+	return found
+}
+
+func sameProject(id int64) func(tmetric.Project) bool {
+	return func(p tmetric.Project) bool { return p.ID == id }
+}
+
+// projectSuggestions are the recent projects while the project field is
+// focused and empty.
+func (f form) projectSuggestions() []tmetric.Project {
+	if f.field != projectField || strings.TrimSpace(f.project.Value()) != "" {
+		return nil
+	}
+	return f.recentProjects()
+}
+
+// use fills the form with the highlighted suggestion; it does not start or
+// save anything.
+func (f form) use() form {
+	if f.field == projectField {
+		f = f.withProject(&f.projectSuggestions()[f.suggest])
+		f.suggest = -1
+		return f
+	}
+	r := f.suggestions()[f.suggest]
 	f.description.SetValue(r.Note)
 	f.description.CursorEnd()
-	f.project.SetValue("")
-	f.cursor, f.tasks, f.tasksFor, f.taskCursor, f.taskTouched = 0, nil, 0, 0, false
-	if r.Project != nil {
-		f.project.SetValue(r.Project.Name)
-		f.cursor = f.indexOf(r.Project.ID)
+	// An edit cannot take the project away, so a suggestion with no project
+	// leaves the entry's project as it is.
+	if r.Project != nil || f.editing == nil {
+		f = f.withProject(r.Project)
 	}
+	f.taskCursor, f.taskTouched = 0, false
 	f.used, f.suggest = &r, -1
+	return f
+}
+
+// withProject puts project, or none, in the project field.
+func (f form) withProject(project *tmetric.Project) form {
+	f.project.SetValue("")
+	f.cursor, f.tasks, f.tasksFor = 0, nil, 0
+	if project != nil {
+		f.project.SetValue(project.Name)
+		f.project.CursorEnd()
+		f.cursor = f.indexOf(project.ID)
+	}
 	return f
 }
 
@@ -145,7 +195,7 @@ func (f form) unchanged() bool {
 func (m model) openEdit(entry tmetric.TimeEntry) (tea.Model, tea.Cmd) {
 	m.overlay = formOverlay
 	m.form = m.editForm(entry, m.day)
-	return m, m.form.description.Focus()
+	return m, tea.Batch(m.form.description.Focus(), m.loadRecent)
 }
 
 // fields is how many fields the form has.
@@ -156,11 +206,18 @@ func (f form) fields() int {
 	return 3
 }
 
-// matches are the projects whose name holds what was typed.
+// matches are the projects whose name holds what was typed, the recent ones
+// first.
 func (f form) matches() []tmetric.Project {
 	query := strings.ToLower(strings.TrimSpace(f.project.Value()))
-	var found []tmetric.Project
+	ordered := f.recentProjects()
 	for _, p := range f.projects {
+		if !slices.ContainsFunc(ordered, sameProject(p.ID)) {
+			ordered = append(ordered, p)
+		}
+	}
+	var found []tmetric.Project
+	for _, p := range ordered {
 		if strings.Contains(strings.ToLower(p.Name), query) {
 			found = append(found, p)
 		}
@@ -227,7 +284,7 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.overlay = noOverlay
 		return m, nil
 	case key.Matches(msg, keyStart) && f.suggest >= 0:
-		m.form = f.use(f.suggestions()[f.suggest])
+		m.form = f.use()
 		return m, nil
 	case key.Matches(msg, keyStart):
 		m.overlay = noOverlay
@@ -243,18 +300,7 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keyNext):
 		return m.nextField()
 	case msg.Type == tea.KeyUp || msg.Type == tea.KeyDown:
-		delta := step(msg)
-		switch f.field {
-		case descField:
-			// -1 is back to typing.
-			f.suggest = max(-1, min(f.suggest+delta, len(f.suggestions())-1))
-		case projectField:
-			f.cursor = clamp(f.cursor+delta, len(f.matches()))
-		case taskField:
-			f.taskCursor = clamp(f.taskCursor+delta, len(f.tasks)+1)
-			f.taskTouched = true
-		}
-		m.form = f
+		m.form = f.move(step(msg))
 		return m, nil
 	}
 	input := f.input()
@@ -272,6 +318,22 @@ func (m model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// move goes up or down the list of the field. On a suggestion list, -1 is
+// back to typing.
+func (f form) move(delta int) form {
+	suggestions := len(f.suggestions()) + len(f.projectSuggestions())
+	switch {
+	case f.field == descField || suggestions > 0:
+		f.suggest = max(-1, min(f.suggest+delta, suggestions-1))
+	case f.field == projectField:
+		f.cursor = clamp(f.cursor+delta, len(f.matches()))
+	case f.field == taskField:
+		f.taskCursor = clamp(f.taskCursor+delta, len(f.tasks)+1)
+		f.taskTouched = true
+	}
+	return f
+}
+
 // nextField moves on, skipping the task field when there is no project, and
 // loads the project's tasks when the task field comes up.
 func (m model) nextField() (tea.Model, tea.Cmd) {
@@ -280,6 +342,7 @@ func (m model) nextField() (tea.Model, tea.Cmd) {
 		input.Blur()
 	}
 	chosen := f.chosen()
+	f.suggest = -1
 	f.field = (f.field + 1) % f.fields()
 	if f.field == taskField && chosen == nil {
 		f.field = (f.field + 1) % f.fields()
@@ -322,10 +385,18 @@ func (f form) change() app.Change {
 		project := id(chosen.ID)
 		change.Project = &project
 	}
-	if f.taskTouched && chosen != nil && f.tasksFor == chosen.ID {
+	switch {
+	case f.taskTouched && chosen != nil && f.tasksFor == chosen.ID:
 		task := ""
 		if f.taskCursor > 0 {
 			task = id(*f.tasks[f.taskCursor-1].ID)
+		}
+		change.Task = &task
+	case f.unchanged() && !external(f.used.Task):
+		// The task of the suggestion it used, or none.
+		task := ""
+		if f.used.Task != nil {
+			task = id(*f.used.Task.ID)
 		}
 		change.Task = &task
 	}
@@ -371,3 +442,7 @@ func (m model) deleteEntry(entry tmetric.TimeEntry) tea.Cmd {
 func clamp(cursor, n int) int {
 	return max(0, min(cursor, n-1))
 }
+
+// external reports whether task links to another tool and has no ID, so an
+// edit cannot set it.
+func external(task *tmetric.Task) bool { return task != nil && task.ID == nil }
